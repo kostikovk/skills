@@ -36,7 +36,7 @@ Use English for repository documentation and skill bodies unless the task reques
 
 Check existing guidance and callers of a rule before introducing a new skill or abstraction. Keep tool installation, role/model routing, permissions, and runtime orchestration separate from reusable engineering procedures. Specialized tools may accelerate a skill, but its core workflow should remain usable with ordinary repository search, file reads, and project runners.
 
-Keep [SKILLS.md](SKILLS.md) consistent with added, removed, or renamed skills and their responsibilities. Update [CONTEXT.md](CONTEXT.md) when repository structure, scope, or validation capabilities change. Keep catalog details and priorities in `SKILLS.md`; do not copy them into both files. Avoid volatile branch names, commit hashes, or machine-specific paths as project facts.
+Keep [SKILLS.md](SKILLS.md) consistent with added, removed, or renamed skills and their responsibilities, and keep [README.md](README.md)'s skill index aligned with the skill set. Update [CONTEXT.md](CONTEXT.md) when repository structure, scope, or validation capabilities change. Keep catalog details and priorities in `SKILLS.md`; do not copy them into other root files. Avoid volatile branch names, commit hashes, or machine-specific paths as project facts.
 
 ## Validation and reporting
 

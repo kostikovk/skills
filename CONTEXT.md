@@ -14,6 +14,7 @@ This repository stores personal development skills shared across projects. A ski
 
 | Document | Responsibility |
 |---|---|
+| [README.md](README.md) | Public overview, grouped skill index, installation/usage options, and entry navigation |
 | [AGENTS.md](AGENTS.md) | Repository operating instructions, task routing, editing boundaries, and verification expectations |
 | [SKILLS.md](SKILLS.md) | Skill catalog and statuses, composition, authoring principles, adaptation notes, and next priorities |
 | `*/SKILL.md` | A skill's activation scope, shared boundaries, required workflow, and conditional navigation |
