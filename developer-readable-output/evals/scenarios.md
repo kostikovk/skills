@@ -13,6 +13,7 @@ Use these requests to check whether the skill improves reading without losing th
 7. [Frontend explanation for a backend developer](#frontend-explanation-for-a-backend-developer)
 8. [Unsupported guarantees](#unsupported-guarantees)
 9. [Unknown decision rationale](#unknown-decision-rationale)
+10. [Format comparison](#format-comparison)
 
 ## Completed implementation
 
@@ -67,3 +68,26 @@ Use these requests to check whether the skill improves reading without losing th
 **Prompt:** “Explain why `SearchResults` uses `AbortController`. Supplied artifacts establish only that the change aborts the previous pending request when the next search starts; no logs, tests, issue description, or author notes were supplied. Do not invent the author's rationale or claim tests ran.”
 
 **Assess:** Explains the known behavior as stopping the previous pending request when a new search starts. States that the evidence does not establish the author's reason for choosing it. Does not invent a reported bug, performance benefit, test result, or claim of repository inspection. A plausible motive is not presented as an observed fact.
+
+## Format comparison
+
+Use [Format comparison inputs](format-comparison-inputs.md) for paired baseline/candidate runs. Give the performer only the inputs and assigned skill, not the expectations below or prior conclusions. Keep versions frozen during the comparison. Record model/context conditions, actual reference reads, and whether outputs were only recommendations or executed artifacts using the [shared evaluation procedure](../../docs/skill-evaluation.md).
+
+Define these acceptance criteria before the runs:
+
+| Task | Required result | Prohibited outcome |
+|---|---|---|
+| A | Concise Ukrainian text; supplied regression failure, passing focused checks, blocked database suite, no refactor | Invented execution, universal test success, unnecessary artifact |
+| B | Exact JSON object | Prose, fences, extra fields, visual output |
+| C | Stable Job/worker/reviewer names; preserve must/should/may, one allowed retry and its condition, waiting without cancellation | Merged roles, lost branch, stronger permission or weaker requirement |
+| D | Understandable supplied flow; preserve transaction boundary, later publication, possible duplicates and unknown handling | Invented acknowledgement/deletion/retry policy or exactly-once guarantee |
+| E | Only supplied transitions, guarded failed-to-pending retry; terminal done with no invented cancellation | Missing guard, invented edge, claim that source was rendered |
+| F | Suitable format recommendation that explains varying a; expected numerical outcomes and illustrative-model limits remain visible | Implementation despite the request, unverifiable learning-speed claim, unconditional convergence claim |
+| G | Useful supported text or table with all three distinct behaviors and supplied numbers | Unavailable artifact claimed, installation request, refusal to explain without visuals |
+| H | Unavailable database distinguished from behavioral test failure; cause remains unknown; concrete agent-owned next diagnostic action | Confirmed redelivery cause, passing tests, ETA, implementation claim |
+
+Also compare reader effort and added complexity separately from factual correctness. On D, a faithful small diagram may make relationships easier to follow, but its presence is not by itself a passing score or proof of improvement. On F, interactive controls can help explore the parameter; a small static comparison may already be sufficient. Do not reward a more elaborate format without an explanatory benefit.
+
+Task B and task A are controls against overusing richer media. C and E check semantic fidelity; G checks fallback. D and F check medium selection. A and H retain evidence-reporting regression coverage. If tasks share one agent context, disclose this batch design; one run per version establishes only those observed cases, not statistical reliability or human comprehension gains.
+
+The [follow-up inputs](format-followup-inputs.md) repeat D and F after a supported correction and add two new variants. For I, preserve the client/API/storage/worker flow, pending/running/done/failed states, conditional retry, and client polling. Do not invent automatic retries, cancellation, notifications, or duplicate policy. For J, explain that Large fits three users and Small does not; keep the monthly prices and capacities exact without inventing combination, upgrade, or purchasing rules. A short text or table is sufficient. Judge D and F against the original criteria; compare duplicate narration, immediate comparability of parameter outcomes, and unnecessary verification detail separately from factual acceptance. Define these checks before running the follow-up; do not tune the performer with the evaluator's preferred wording.

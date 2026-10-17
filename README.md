@@ -32,7 +32,7 @@ Canonical activation scopes, responsibilities, statuses, and priorities live in 
   - [code-review](code-review/SKILL.md) — snapshot-aware diff and PR review for task fidelity, regressions, and impact-ranked defects
   - [git-delivery](git-delivery/SKILL.md) — task branch/worktree isolation before edits, verified Conventional Commits, PR preparation, and post-merge cleanup
   - [learn-from-mistakes](learn-from-mistakes/SKILL.md) — evidence-backed lessons from mistakes or corrections and retrieval before similar work
-  - [developer-readable-output](developer-readable-output/SKILL.md) — clear developer communication across frontend and backend specialties without losing technical evidence
+  - [developer-readable-output](developer-readable-output/SKILL.md) — clear developer communication, appropriate explanation formats, and preserved technical evidence
 
 ## How the skills compose
 

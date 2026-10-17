@@ -76,6 +76,8 @@ The change-review workflow has been checked with a fresh-context batch of twelve
 
 The planning and plan-review workflows have been exercised in five bounded read-only cases: a compact documentation plan with automatic disclosed self-review, pricing-fixture discovery with grouped unanswered decisions, and three plan reviews covering a clean control, missing acceptance coverage and an unavailable external contract with an independent ready branch. The [validation record](plan/evals/validation.md) distinguishes actual repository reads from supplied-record review and lists unexercised routes. These runs establish neither product implementation nor installed hook activation, independent automatic-review execution or measured improvement.
 
+The readable-output skill includes a conditional explanation-format route and selected controlled-writing principles. A paired supplied-record evaluation compared the unchanged skill with an expanded version; both passed the initial eight result scenarios, while independent grading found no established overall clarity improvement. The [evaluation record](developer-readable-output/evals/validation.md) documents the correction, follow-up, and limits. These are response and format-decision checks, not rendered or executable demonstration validation, measured human comprehension, or STE compliance.
+
 ## Continuing the work
 
 Select work from the user's request and the [next priorities](SKILLS.md#priorities-for-the-next-changes). Inspect affected skills before extending them; use actual tasks to justify new procedures, references, or skills. Keep documentation proportional to the change and update the owning document instead of maintaining parallel copies of the same rule.

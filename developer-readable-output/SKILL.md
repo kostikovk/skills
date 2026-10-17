@@ -11,10 +11,12 @@ Help the developer find the answer, understand its basis, and see whether anythi
 
 - Start with the useful answer, observed result, recommendation, or blocker. Lead with an action when the reader actually needs to perform it. Avoid introductory filler and retelling the conversation.
 - Write for a capable developer who may not specialize in the affected stack. Prefer familiar words and explain necessary technical terms at first use through what the code does or what can go wrong. Keep exact identifiers, but do not use acronyms, pattern names, or claims such as “best practice” as explanations by themselves.
+- Use the same name for the same concept throughout an explanation. Preserve distinct names for distinct components. Prefer direct sentences that name the actor when known; do not invent an actor to make the wording simpler.
 - For a substantive change or decision, make clear what changed, why this choice addresses the observed problem, and which concrete facts support it. Connect code, logs, or test results to a consequence the reader can understand. Distinguish evidence from assumptions; simplify the wording without weakening the technical claim. A small answer does not need a formal report template.
 - Preserve the task's required information, evidence, uncertainty, and material limitations. A compact report must not turn an unrun check into a passing check, a hypothesis into a cause, or a partial result into completion. The owning engineering skill still determines its required fields and workflow.
 - Follow the user's language, requested detail, and output format. Keep code identifiers and commands exact. A required JSON/schema-only response, patch, exact quotation, or other strict artifact takes precedence over prose formatting; add no conversational wrapper.
 - Use short paragraphs with one main point. Use bullets for parallel facts, numbers for ordered actions, and tables for comparisons when they improve scanning. Add headings only when they help navigate a longer response. Avoid nested lists, decorative emphasis, and rigid list or word limits that hide necessary information.
+- Choose the simplest form that makes the mechanism understandable. Text is enough for ordinary reports; diagrams can clarify relationships, and interactive examples can clarify the effect of changing inputs. Respect the requested format and available surface. Artifact implementation follows the owning workflow and the task's scope; choosing a medium does not expand either.
 - Keep locations, commands, and evidence near the claim they support. Use readable file links when the surface supports them; otherwise use precise paths and line numbers. Put runnable commands or code in fenced blocks and distinguish examples from commands actually executed.
 - Mention a next step only when work remains, with a clear owner and concrete purpose. Continue authorized agent work rather than handing it back as advice. A completed task can end with its result and validation. Do not invent estimates, require a question at the end, or assume a diagnosis or reading preference from this skill's inspiration.
 
@@ -26,6 +28,7 @@ For a short answer, the shared boundaries are enough. For a substantial response
 |---|---|
 | Explain code, a concept, or an open design choice | [Explanations and decisions](references/developer-responses.md#explanations-and-decisions) |
 | Explain unfamiliar frontend/backend behavior or translate dense terminology | [Cross-stack explanations](references/cross-stack-explanations.md) |
+| Choose text, a diagram, an interactive example, or animation for a substantial explanation | [Explanation formats](references/explanation-formats.md) |
 | Report completed implementation or validation | [Implementation reports](references/developer-responses.md#implementation-reports) |
 | Share progress, a debugging result, or a blocker | [Progress and debugging](references/developer-responses.md#progress-and-debugging) |
 | Present review findings | [Code reviews](references/developer-responses.md#code-reviews) |
