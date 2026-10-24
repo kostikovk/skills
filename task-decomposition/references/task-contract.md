@@ -44,11 +44,24 @@ Review it for these failure modes:
 
 Shared requirements such as access control need coverage at every affected boundary and in assembled acceptance where relevant. One task label does not prove all consumers satisfy the guarantee. Parallel work is viable only where dependencies and contracts permit it; no particular agent arrangement is required.
 
+## Cover participating boundaries
+
+For a scenario spanning components or repositories, record a compact boundary map alongside the requirement-to-task mapping. Follow the trigger through the result, including return data and asynchronous completion, rather than stopping at the first successful endpoint. The map may be prose, a table, or an annotated flow in the existing task format; a simple local change does not need an extra artifact.
+
+For each participating boundary, identify:
+
+- The producer and consumer, with verified component/repository locations or an explicit discovery gap.
+- The established contract that matters to this scenario: inputs, outputs and error behavior, plus applicable access/data guarantees. Include response metadata or completion/retrieval state when it affects the observable result; do not invent API details or select an open design here.
+- The responsible technical contribution and task, or evidence that the existing unchanged capability satisfies the dependency. Group coupled boundaries in one task when appropriate; one boundary does not require one ticket.
+- The check that verifies the boundary and how it participates in the assembled acceptance path. Identify available environments, configuration, versions or external capabilities when compatibility depends on them.
+
+Reconcile both sides of a contract before dependent execution. An unknown interface, incompatible version or unavailable environment must have an explicit disposition and affected readiness/evidence status. A shared integration responsibility does not replace each task's bounded contribution; assign one accountable owner or task to collect the slice's assembled acceptance evidence using the rules below.
+
 ## Assign acceptance and preserve evidence boundaries
 
 Use the canonical distinction between task verification, assembled-scenario acceptance, and product outcome evidence in [Evidence and product outcomes](../../requirements-definition/references/requirement-contract.md#evidence-and-product-outcomes). Task preparation must identify how each relevant claim will be assessed; success at one level does not establish the others.
 
-Assign an assembled acceptance responsibility before execution. Define a representative end-to-end path and relevant guarantees, using the project's actual validation environment. Isolated unit checks and mocked downstream behavior are useful task evidence but do not prove assembled behavior. If the real boundary cannot be exercised, report the remaining acceptance gap and the required environment or input; do not claim the slice is accepted.
+Assign an assembled acceptance responsibility before execution. Define a representative end-to-end path and relevant guarantees, using the project's actual validation environment. Start from the selected scenario's trigger and verify its observable result; a browser download scenario includes the interaction and downloaded contents, and an asynchronous scenario includes the required completion and retrieval path. Check relevant rejection/failure behavior against the agreed requirements. Isolated unit checks and mocked downstream behavior are useful task evidence but do not prove assembled behavior. If the real boundary cannot be exercised, report the remaining acceptance gap and the required environment or input; do not claim the slice is accepted. Completed technical tasks can coexist with pending or blocked slice acceptance; preserve independent work whose prerequisites remain satisfied.
 
 Product outcome evidence may arrive after delivery. Preserve its owner, intended measure or observation, and timing where defined; report pending outcome evidence separately from completed engineering checks. Do not invent numeric success targets.
 

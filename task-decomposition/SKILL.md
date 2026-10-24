@@ -10,9 +10,9 @@ Produce a task set whose assembled result satisfies the selected product require
 ## Essential workflow — always apply
 
 1. Locate the product request and canonical requirements. Inspect relevant implementation, contracts, tests, and project constraints before naming technical work. Use [requirements-definition](../requirements-definition/SKILL.md) when behavior or scope is unresolved; preserve its requirement IDs and statuses. Do not invent product decisions, repository paths, a stack, or implementation capabilities.
-2. Select the delivery scope and identify completed behavioral slices before splitting their technical work. Preserve necessary access, security, and data guarantees in the first usable slice. Use the slicing reference when the request needs multiple slices or the proposed split is primarily by technical layer.
+2. Select the delivery scope and identify completed behavioral slices before splitting their technical work. Preserve necessary access, security, and data guarantees in the first usable slice. Use the slicing reference when the request needs multiple slices, crosses components or repositories, or the proposed split is primarily by technical layer.
 3. Give each execution-ready task a bounded result, requirement links, context, scope, dependencies, acceptance checks, evidence expectations, and stop conditions. Read the task-contract reference before preparing work for execution or reviewing an existing task set. Research spikes and technical enablers need appropriate evidence, not fabricated individual user value.
-4. Check requirement coverage, justified task scope, ownership, dependency order and contracts, and acceptance of the assembled scenario. Green isolated components or mocked dependencies do not establish assembled behavior. Identify who or which task performs that acceptance.
+4. Check requirement coverage, justified task scope, ownership, dependency order and contracts, and acceptance of the assembled scenario. For flows spanning components, use the task-contract reference to account for each participating boundary through the observable result. Green isolated components or mocked dependencies do not establish assembled behavior. Identify who or which task performs that acceptance.
 5. Distinguish ready work from provisional planning. A product or technical decision blocks only the work that depends on it; independent ready branches may continue. Keep later scope coarse and explicitly deferred. Route open technical choices to [design-decision](../design-decision/SKILL.md); pass ready implementation work to [code-change](../code-change/SKILL.md), retaining its TDD/AAA gates.
 6. For changed requirements, invoke the change procedure owned by [requirements-definition](../requirements-definition/SKILL.md), then revise affected slices, tasks, dependencies, and acceptance evidence. Mark affected task readiness and prior evidence for reassessment; preserve unaffected ready work.
 
@@ -26,9 +26,10 @@ When decomposition is part of a plan, include its tasks in the mandatory [plan-r
 
 | Need | Read | Prerequisite |
 |---|---|---|
-| Large scope, layer-only tickets, or uncertainty about where to split | [Slicing](references/slicing.md) | Identify the selected requirements and outstanding decisions |
+| Large scope, flows across components/repositories, layer-only tickets, or uncertainty about where to split | [Slicing](references/slicing.md) | Identify the selected requirements and outstanding decisions |
 | Execution-ready tasks, enablers/spikes, or coverage/dependency review | [Task contract and coherence](references/task-contract.md) | Read canonical requirement semantics through requirements-definition; select the delivery scope |
 | A concrete example of the product-to-task mapping | [Worked example](references/worked-example.md) | Use the contract reference for real task preparation; example choices are illustrative |
+| Download or asynchronous completion across services and UI | [CSV export example](references/csv-export-example.md) | Read slicing and task contracts; the example illustrates contracts, not a required architecture |
 
 ## Deliver and stop
 
