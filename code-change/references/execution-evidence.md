@@ -124,6 +124,16 @@ The completion JSON contains:
 
 Development requires each selected AC to have a `pass` attestation with a concrete executed evidence reference. Planning accepts `planned` with a feasible acceptance/evidence plan; use `pass` only for behavior actually checked. Planning completion does not mean its future implementation already works. Review must actually have occurred, including task fidelity and unresolved findings. Retrospective semantics/categories are owned by [task-retrospective](../../learn-from-mistakes/references/task-retrospective.md). These fields are operator attestations, not automatically verified truth. An incomplete cycle, the latest failed or stale required check, missing review/AC/retrospective, or unmatched module markers keeps the structural report incomplete. So do, for Development, an approval not bound to the reviewed content, an unacknowledged dirty workspace at intake, and no `review` note after the last GREEN/REFACTOR and the last observed production or test change. Intake snapshots and SHA-256 fingerprints detect changed/unavailable ticket/evidence inputs on subsequent helper calls. Preserve originals while a run is active; the run stores local absolute provenance, while the transferable ticket bundle uses relative references. No receipt file is tamper-proof.
 
+## Retrospective ledger
+
+`report` and `close` take `--ledger <dir>`; nothing is written without it, and the directory's parent must already exist (the directory itself is created with the first real row). Each run writes one row, `<dir>/<run_id>.json`, overwritten if the same run reports again: run/task/workflow/ticket identity, completion and gap count, TDD status, the retrospective classification and improvements, recorded event counts, readiness and RED→GREEN times. Every report also carries the row as `ledger_row`.
+
+- Planning writes its row into the ticket bundle (`<bundle>/ledger/`), never into the project tree, and does not list it in `evidence`, so writing it after review cannot change the reviewed content digest. Read-only Planning writes no row.
+- Development intake snapshots `<bundle>/ledger/*.json` into the run's `ledger-inputs/` (`ledger_inputs` in `run.json`). Development `close --ledger <worktree>/docs/workflow-retrospectives` writes its own row and copies the unchanged Planning rows; a row changed after intake is listed in `ledger_warnings`, not copied, and does not block completion.
+- Commit these files with the delivery. They are evidence, not reviewed code, and are not selected sources. One file per run means parallel branches never conflict.
+
+`ledger <dir>` summarizes the latest row per run: complete/incomplete counts, counts per classification, and recurring candidates (a classification present in at least two runs, with their improvements and run IDs). It proposes and adopts nothing; evaluation follows [learn-from-mistakes](../../learn-from-mistakes/references/task-retrospective.md).
+
 ## Native telemetry and coverage
 
 When running through a CLI, retain its documented native output directly rather than estimating provider metrics. Check the installed version/help and project permissions first. These examples do not grant additional tool permissions or select a model:

@@ -10,7 +10,7 @@
 
 Use the store designated by current project instructions or the user. Inspect relevant existing lessons, retrospectives, and decision records before creating another store. Keep evidence in its existing owner and link to it rather than duplicating an ADR or test explanation.
 
-When no store is designated, use `docs/lessons.md` in the target project as the portable fallback for authorized memory edits. Do not create an empty file just to establish memory. The skill repository contains the procedure and template; each target project's store contains its experience. Do not place real project lessons in this skill's assets or examples.
+When no store is designated, use `docs/lessons.md` in the target project as the portable fallback for authorized memory edits. Per-run workflow retrospectives belong in `docs/workflow-retrospectives/` (one row per run, written by the receipt helper), not in the lesson file; lessons cite those rows as evidence. Do not create an empty file just to establish memory. The skill repository contains the procedure and template; each target project's store contains its experience. Do not place real project lessons in this skill's assets or examples.
 
 A Markdown file with one heading per lesson is sufficient initially. Use a short descriptive ID such as `shared-capacity-check` and retain it across revisions. If search becomes ineffective, use the project's existing indexing or document layout; do not introduce a database, plugin, vector service, or mandatory memory tool by default.
 

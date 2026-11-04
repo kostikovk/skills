@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import shutil
 from pathlib import Path
 import tempfile
 import unittest
@@ -1245,7 +1246,9 @@ def snapshot_run(run_dir, *files):
     return state
 
 
-class CloseTests(Fixture):
+class ClosingFixture(Fixture):
+    """Shared Planning and Development runs that are ready to be closed; defines no tests."""
+
     def planning_draft(self, blocking=None):
         ticket = example_ticket()
         ticket.update(status="draft", approval=None, blocking_questions=blocking or [])
@@ -1271,6 +1274,8 @@ class CloseTests(Fixture):
         workflow.record_command(run_dir, "verify", "suite", [sys.executable, "-c", "pass"], module="D4")
         return run_dir
 
+
+class CloseTests(ClosingFixture):
     def test_should_complete_planning_when_close_is_called_once(self):
         """should complete Planning with one close call after discovery receipts and a READY review"""
         run_dir = self.planning_draft()
@@ -1414,6 +1419,132 @@ class CloseTests(Fixture):
         self.assertGreaterEqual(actual["module_activity"]["D3"]["command_seconds"], 0)
 
 
+class LedgerTests(ClosingFixture):
+    def reviewed_planning(self):
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        return run_dir
+
+    def classified_assessment(self, name, classification):
+        supplied = assessment()
+        supplied["retrospective"]["classification"] = classification
+        supplied["retrospective"]["improvements"] = f"Clarify inputs for {name}"
+        path = self.root / f"{name}-assessment.json"
+        path.write_text(json.dumps(supplied))
+        return path
+
+    def test_should_write_one_row_when_report_has_ledger(self):
+        """should write exactly one row named by the run ID when a ledger directory is given"""
+        run_dir = self.development_cycle()
+        workflow.note(run_dir, "review", "Independent code review", verdict="PASS")
+        ledger = self.root / "retrospectives"
+
+        report = workflow.close_run(run_dir, assessment_file(self.root), ledger=ledger)
+
+        rows = sorted(ledger.glob("*.json"))
+        self.assertEqual([row.stem for row in rows], [report["run_id"]])
+        self.assertEqual(json.loads(rows[0].read_text())["complete"], True)
+        self.assertEqual(report["ledger_row"]["run_id"], report["run_id"])
+
+    def test_should_overwrite_own_row_when_run_is_reported_again(self):
+        """should keep one row per run when the same run is reported twice"""
+        run_dir = self.development_cycle()
+        workflow.note(run_dir, "review", "Independent code review", verdict="PASS")
+        ledger = self.root / "retrospectives"
+        supplied = assessment()
+
+        workflow.build_report(run_dir, supplied, ledger=ledger)
+        workflow.build_report(run_dir, supplied, ledger=ledger)
+
+        self.assertEqual(len(list(ledger.glob("*.json"))), 1)
+
+    def test_should_keep_approval_valid_when_planning_row_is_written_after_review(self):
+        """should still approve the reviewed ticket after Planning writes its row into the bundle"""
+        run_dir = self.reviewed_planning()
+
+        workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True,
+                           ledger=self.root / "ledger")
+        approved = workflow.approve_ticket(self.path, run_dir / "report.json", "User approved revision 1")
+
+        self.assertEqual(approved["status"], "approved")
+        self.assertEqual(len(list((self.root / "ledger").glob("*.json"))), 1)
+
+    def test_should_snapshot_planning_rows_when_development_starts(self):
+        """should snapshot Planning ledger rows from the bundle at Development intake"""
+        self.write_bound_ticket()
+        (self.root / "ledger").mkdir()
+        (self.root / "ledger" / "planning-run.json").write_text('{"run_id": "planning-run"}\n')
+
+        actual = workflow.init_run(self.root / "run", "development", "price-preview", self.root, self.path)
+
+        self.assertEqual((self.root / "run" / "ledger-inputs" / "planning-run.json").read_text(),
+                         '{"run_id": "planning-run"}\n')
+        self.assertEqual(actual["ledger_inputs"]["planning-run.json"]["sha256"],
+                         workflow.digest(self.root / "ledger" / "planning-run.json"))
+
+    def test_should_copy_planning_row_when_development_closes_with_ledger(self):
+        """should copy the unchanged Planning row into the Development ledger at close"""
+        (self.root / "ledger").mkdir()
+        (self.root / "ledger" / "planning-run.json").write_text('{"run_id": "planning-run"}\n')
+        run_dir = self.development_cycle()
+        workflow.note(run_dir, "review", "Independent code review", verdict="PASS")
+        ledger = self.root / "project-ledger"
+
+        report = workflow.close_run(run_dir, assessment_file(self.root), ledger=ledger)
+
+        self.assertEqual(sorted(row.name for row in ledger.glob("*.json")),
+                         sorted(["planning-run.json", f"{report['run_id']}.json"]))
+        self.assertEqual(report["ledger_warnings"], [])
+
+    def test_should_warn_without_blocking_when_snapshotted_row_changes(self):
+        """should warn, skip the copy and still complete when a Planning row changed after intake"""
+        (self.root / "ledger").mkdir()
+        (self.root / "ledger" / "planning-run.json").write_text('{"run_id": "planning-run"}\n')
+        run_dir = self.development_cycle()
+        (self.root / "ledger" / "planning-run.json").write_text('{"run_id": "planning-run", "edited": true}\n')
+        workflow.note(run_dir, "review", "Independent code review", verdict="PASS")
+        ledger = self.root / "project-ledger"
+
+        report = workflow.close_run(run_dir, assessment_file(self.root), ledger=ledger)
+
+        self.assertTrue(report["complete"], report["gaps"])
+        self.assertEqual(report["ledger_warnings"], ["Planning ledger row changed after intake: planning-run.json"])
+        self.assertFalse((ledger / "planning-run.json").exists())
+
+    def test_should_summarize_recurring_classification_across_two_worktrees(self):
+        """should report a classification shared by runs from two worktrees as a recurring candidate"""
+        merged = self.root / "merged"
+        merged.mkdir()
+        for name in ["first", "second"]:
+            run_dir = self.root / f"{name}-run"
+            workflow.init_run(run_dir, "planning", name, self.root)
+            worktree_ledger = self.root / f"{name}-worktree" / "ledger"
+            worktree_ledger.parent.mkdir()
+            workflow.build_report(run_dir, json.loads(self.classified_assessment(name, ["missing-context"]).read_text()),
+                                  ledger=worktree_ledger)
+            for row in worktree_ledger.glob("*.json"):
+                shutil.copy(row, merged / row.name)
+
+        actual = workflow.summarize_ledger(merged)
+
+        self.assertEqual(actual["runs"], 2)
+        self.assertEqual([item["classification"] for item in actual["recurring"]], ["missing-context"])
+        self.assertEqual(len(actual["recurring"][0]["run_ids"]), 2)
+        self.assertEqual(sorted(actual["recurring"][0]["improvements"]),
+                         ["Clarify inputs for first", "Clarify inputs for second"])
+
+    def test_should_refuse_close_when_ledger_parent_is_missing(self):
+        """should refuse close without writing when the ledger's parent directory does not exist"""
+        run_dir = self.development_cycle()
+        workflow.note(run_dir, "review", "Independent code review", verdict="PASS")
+        before = snapshot_run(run_dir)
+
+        with self.assertRaisesRegex(ValueError, "Ledger parent directory is unavailable"):
+            workflow.close_run(run_dir, assessment_file(self.root), ledger=self.root / "missing" / "ledger")
+
+        self.assertEqual(snapshot_run(run_dir), before)
+
+
 class NativeTests(Fixture):
     def setUp(self):
         super().setUp()
@@ -1551,6 +1682,27 @@ class CliTests(Fixture):
             self.assertEqual(result.returncode, 0, f"{args[0]}: {result.stderr}{result.stdout}")
         self.assertTrue(json.loads((run_dir / "report.json").read_text())["complete"])
         self.assertEqual(json.loads(self.path.read_text())["status"], "ready")
+
+    def test_should_write_and_summarize_ledger_when_invoked_from_cli(self):
+        """should write a ledger row on close and summarize it with the ledger command from the CLI"""
+        ticket = example_ticket()
+        ticket.update(status="draft", approval=None)
+        self.write_ticket(ticket)
+        run_dir, ledger = self.root / "planning", self.root / "ledger"
+        commands = [
+            ["init", str(run_dir), "--workflow", "planning", "--task", "pricing", "--repo", str(self.root)],
+            ["note", str(run_dir), "--kind", "review", "--verdict", "READY", "--text", "Independent plan-review"],
+            ["close", str(run_dir), "--ticket", str(self.path), "--assessment", str(planned_assessment(self.root)),
+             "--ready", "--ledger", str(ledger)],
+            ["ledger", str(ledger)],
+        ]
+
+        actual = [subprocess.run([sys.executable, "-B", str(SCRIPT), *args],
+                                 cwd=self.root, capture_output=True, text=True) for args in commands]
+
+        for args, result in zip(commands, actual):
+            self.assertEqual(result.returncode, 0, f"{args[0]}: {result.stderr}{result.stdout}")
+        self.assertEqual(json.loads(actual[-1].stdout)["runs"], 1)
 
     def test_should_return_failure_with_report_when_completion_evidence_is_absent(self):
         """should return failure with report when completion evidence is absent"""

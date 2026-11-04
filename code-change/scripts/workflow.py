@@ -195,6 +195,14 @@ def init_run(run_dir, workflow_name, task_id, repo, ticket_path=None,
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(original, target)
             inputs[str(original)] = {"copy": str(target.relative_to(run_dir)), "sha256": digest(target)}
+    ledger_inputs = {}
+    if ticket and workflow_name == "development":
+        for row in sorted((Path(ticket_path).resolve().parent / "ledger").glob("*.json")):
+            target = run_dir / "ledger-inputs" / row.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(row, target)
+            ledger_inputs[row.name] = {"original": str(row), "copy": str(target.relative_to(run_dir)),
+                                       "sha256": digest(target)}
     revision = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
                               capture_output=True, text=True)
     metadata = {"format_version": 1, "run_id": str(uuid.uuid4()), "task_id": task_id,
@@ -207,7 +215,8 @@ def init_run(run_dir, workflow_name, task_id, repo, ticket_path=None,
                 "ticket_revision": ticket["revision"] if ticket else None, "inputs": inputs}
     metadata.update(groups)
     metadata.update(workspace=workspace, predecessor=predecessor,
-                    ticket_id=ticket["id"] if ticket else None, module_scheme=MODULE_SCHEME)
+                    ticket_id=ticket["id"] if ticket else None, module_scheme=MODULE_SCHEME,
+                    ledger_inputs=ledger_inputs)
     metadata["source_intake"] = snapshot_sources(run_dir, repo, selected, "intake")
     write_json(run_dir / "run.json", metadata)
     (run_dir / "events.jsonl").touch()
@@ -325,7 +334,7 @@ def record_command(run_dir, phase, label, argv, reason=None, module=None):
                                  "reason": reason})
 
 
-def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, ready=False):
+def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, ready=False, ledger=None):
     """Finish a run in one call. Every precondition is checked before the first write."""
     run_dir = Path(run_dir)
     metadata = read_run(run_dir)
@@ -333,6 +342,7 @@ def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, read
     supplied = json.loads(Path(assessment_path).read_text())
     require(isinstance(supplied, dict), "Assessment must be an object")
     review_bytes = Path(review_file).read_bytes() if review_file else None
+    check_ledger(ledger)
     recorded = events(run_dir)
     commands = [event for event in recorded if event["kind"] == "command"]
     reviews = [event for event in recorded if event["kind"] == "review"]
@@ -378,7 +388,7 @@ def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, read
     for module in starts:
         append_event(run_dir, {"kind": "module-end", "module": module, "text": "closed by close",
                                "auto_closed": True, "source": "helper"})
-    report = build_report(run_dir, supplied, ticket_path if planning else None)
+    report = build_report(run_dir, supplied, ticket_path if planning else None, ledger)
     write_json(run_dir / "report.json", report)
     return report
 
@@ -403,7 +413,32 @@ def note(run_dir, kind, text, module=None, label=None, verdict=None):
                                  "verdict": verdict, "source": "operator-attested"})
 
 
-def build_report(run_dir, assessment=None, ticket_path=None):
+def check_ledger(ledger):
+    require(ledger is None or Path(ledger).parent.is_dir(), "Ledger parent directory is unavailable")
+
+
+def summarize_ledger(directory):
+    """Latest row per run and classifications shared by at least two runs; proposes nothing."""
+    latest = {}
+    for path in sorted(Path(directory).glob("*.json")):
+        row = json.loads(path.read_text())
+        key = row.get("run_id", path.stem)
+        if key not in latest or str(row.get("recorded_at", "")) >= str(latest[key].get("recorded_at", "")):
+            latest[key] = row
+    by_cause = {}
+    for key, row in latest.items():
+        for cause in row.get("classification") or []:
+            by_cause.setdefault(cause, []).append((key, row.get("improvements")))
+    complete = sum(row.get("complete") is True for row in latest.values())
+    return {"runs": len(latest), "complete": complete, "incomplete": len(latest) - complete,
+            "classification_counts": {cause: len(items) for cause, items in sorted(by_cause.items())},
+            "recurring": [{"classification": cause, "run_ids": [key for key, _ in items],
+                           "improvements": [text for _, text in items if nonempty(text)]}
+                          for cause, items in sorted(by_cause.items()) if len(items) >= 2]}
+
+
+def build_report(run_dir, assessment=None, ticket_path=None, ledger=None):
+    check_ledger(ledger)
     metadata = read_run(run_dir)
     recorded = events(run_dir)
     assessment = assessment or {}
@@ -605,7 +640,7 @@ def build_report(run_dir, assessment=None, ticket_path=None):
                              if applicable else []) + missing_integrity,
         "basis": "Local receipts and operator attestations cannot certify semantic TDD compliance",
     }
-    return {**metadata, "generated_at": now(), "complete": not gaps, "gaps": gaps,
+    result = {**metadata, "generated_at": now(), "complete": not gaps, "gaps": gaps,
             "completion_scope": "structural evidence only", "tdd_compliance": compliance,
             "ticket_revision": ticket["revision"] if ticket else None,
             "output_ticket": ticket if metadata["workflow"] == "planning" else None,
@@ -625,6 +660,34 @@ def build_report(run_dir, assessment=None, ticket_path=None):
                                 "Expected RED classification, AC coverage and review require semantic inspection",
                                 "Unrecorded actions, unavailable usage and human interventions cannot be inferred",
                                 "No filesystem interception, tamper-proofing or automatic hook enforcement"]}
+    retrospective = assessment.get("retrospective", {})
+    result["ledger_row"] = {
+        "run_id": metadata["run_id"], "task_id": metadata["task_id"], "workflow": metadata["workflow"],
+        "ticket_id": metadata.get("ticket_id"), "ticket_revision": result["ticket_revision"],
+        "recorded_at": result["generated_at"], "complete": result["complete"], "gap_count": len(gaps),
+        "tdd_status": compliance["status"], "classification": retrospective.get("classification") or [],
+        "improvements": retrospective.get("improvements"),
+        "counts": {"commands": len(commands), "failures": result["command_failures"], "tdd_cycles": len(cycles),
+                   **{kind: counts.get(kind, 0) for kind in ["clarification", "evidence-gap", "missed-functionality",
+                                                             "unexpected-dependency", "migration", "ticket-rework",
+                                                             "rework", "human"]}},
+        "time_to_ready_seconds": result["time_to_ready_seconds"], "red_to_green_seconds": red_to_green}
+    # Planning rows snapshotted at intake travel on; a changed row is a warning, never a delivery gap.
+    unchanged, warnings = [], []
+    for name, item in metadata.get("ledger_inputs", {}).items():
+        original = Path(item["original"])
+        if original.is_file() and digest(original) == item["sha256"]:
+            unchanged.append(Path(run_dir) / item["copy"])
+        else:
+            warnings.append(f"Planning ledger row changed after intake: {name}")
+    result["ledger_warnings"] = warnings
+    if ledger:
+        ledger = Path(ledger)
+        ledger.mkdir(exist_ok=True)
+        write_json(ledger / f"{metadata['run_id']}.json", result["ledger_row"])
+        for row in unchanged:
+            shutil.copyfile(row, ledger / row.name)
+    return result
 
 
 def final_change_sequence(metadata, commands):
@@ -747,6 +810,7 @@ def main():
     finish.add_argument("--ticket", help="Planning output bundle ticket")
     finish.add_argument("--review-file", help="Review record to retain as evidence of the latest review note")
     finish.add_argument("--ready", action="store_true", help="Planning: mark a draft ticket ready after a READY review")
+    finish.add_argument("--ledger", help="Directory for this run's retrospective row; its parent must exist")
     native = sub.add_parser("native", help="Retain and extract a native JSON/JSONL capture")
     native.add_argument("run_dir")
     native.add_argument("--provider", required=True, choices=["codex", "claude"])
@@ -755,6 +819,9 @@ def main():
     report.add_argument("run_dir")
     report.add_argument("--assessment")
     report.add_argument("--ticket", help="Final Planning output bundle ticket")
+    report.add_argument("--ledger", help="Directory for this run's retrospective row; its parent must exist")
+    summary = sub.add_parser("ledger", help="Summarize retrospective rows and recurring causes; proposes nothing")
+    summary.add_argument("directory")
     # Separate command argv explicitly; do not interpret or execute a shell string.
     arguments = sys.argv[1:]
     argv = []
@@ -778,13 +845,15 @@ def main():
         elif args.action == "note":
             result = note(args.run_dir, args.kind, args.text, args.module, args.label, args.verdict)
         elif args.action == "close":
-            result = close_run(args.run_dir, args.assessment, args.ticket, args.review_file, args.ready)
+            result = close_run(args.run_dir, args.assessment, args.ticket, args.review_file, args.ready, args.ledger)
             code = 0 if result["complete"] else 1
+        elif args.action == "ledger":
+            result = summarize_ledger(args.directory)
         elif args.action == "native":
             result = import_native(args.run_dir, args.provider, args.source)
         else:
             supplied = json.loads(Path(args.assessment).read_text()) if args.assessment else None
-            result = build_report(args.run_dir, supplied, args.ticket)
+            result = build_report(args.run_dir, supplied, args.ticket, args.ledger)
             write_json(Path(args.run_dir) / "report.json", result)
             code = 0 if result["complete"] else 1
         print(json.dumps(result, indent=2))
