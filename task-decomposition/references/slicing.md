@@ -1,6 +1,6 @@
 # Slicing product work
 
-Read this when a request spans multiple behaviors or a proposed backlog consists mostly of database/API/UI layers.
+Read this when a request spans multiple behaviors, components or repositories, or a proposed backlog consists mostly of database/API/UI layers.
 
 ## Find completed behaviors
 
@@ -20,6 +20,14 @@ Useful split dimensions depend on the actual requirements:
 Do not infer permission to omit authorization, tenant isolation, integrity, or required recovery behavior from a smaller slice. Identify applicable guarantees from requirements and the existing product contract. If they cannot be maintained, the slice is not a usable delivery candidate.
 
 For each slice record the observable result, covered requirements, excluded/deferred variants, acceptance examples, and known prerequisites. A slice may cover several requirements; a requirement may span several slices. Keep this mapping explicit rather than forcing one requirement into one ticket.
+
+## Follow the result across components
+
+A single slice may cross services, gateways, server-side adapters, UI, and repositories. Trace the actor's trigger through the participating components to the observable result, including the response or asynchronous completion path. Use verified architecture and contracts; mark unknown hops explicitly rather than inventing a stack. A list of participating services does not establish which service calls another or where responses are combined; keep those edges unresolved until evidence establishes them. Inspect only the components needed for the selected scenario, not the whole system.
+
+For example, a CSV export slice ends when the user receives the agreed file. A working data endpoint, gateway route, or export button can be a technical contribution within that slice. For an agreed asynchronous export, accepting a job alone does not complete a slice whose result is a downloaded file; include the required completion, retrieval, and failure behavior. A smaller workflow step qualifies as a separate slice only when it has independently useful agreed behavior.
+
+Component or repository boundaries can justify separate technical tasks without turning each into a product slice. Existing unchanged components still participate in the acceptance path; they do not need invented implementation tickets. Use [boundary coverage](task-contract.md#cover-participating-boundaries) to assign contracts, contributions, and acceptance responsibility. See the [CSV export example](csv-export-example.md) for a concrete mapping.
 
 ## Separate the kinds of work
 

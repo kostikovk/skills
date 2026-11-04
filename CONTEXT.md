@@ -55,6 +55,14 @@ The earlier `pi-engineer-os` repository is an optional source of ideas, not a de
 
 An installer, automatic project initialization, and complete tool adapters are not implemented here. Their eventual purpose is to configure the shared workflow for a project, after the skill composition is stable.
 
+The independent Planning and Development routes compose existing skills through a versioned ticket bundle. An optional standard-library command-receipt helper under `code-change/scripts/` captures local execution and imports native provider events without installing configuration. Its regression tests live under `code-change/evals/`. This adds local validation capability, not an installed runtime, tracker integration, trusted hook or universal TDD enforcement. The [workflow audit](docs/workflow-audit.md) records architecture and decisions; the [workflow evaluation](docs/workflow-evaluation.md) records observed coverage separately.
+
+The helper separates structural completion from unverified TDD compliance, checks
+retained command-log integrity, and can snapshot explicitly selected source files
+to flag sampled ordering contradictions and stale verification. These local checks
+cannot certify behavioral failure semantics or complete action coverage; see the
+[TDD hardening record](docs/tdd-integration-validation.md) for exercised boundaries.
+
 ## Validation boundaries
 
 There is no repository-wide application build or test pipeline. Choose checks for the changed artifact:
@@ -63,6 +71,7 @@ There is no repository-wide application build or test pipeline. Choose checks fo
 - **Skill format:** when available, run a skill validator such as `quick_validate.py` from an installed `skill-creator` skill against each changed skill directory. That external validator may need dependencies; it is not a bundled repository command. Format success does not prove the skill's decisions or execution order.
 - **Synthetic fixture:** from `design-decision/evals/fixtures/project-precedent`, run `python3 -B -m unittest discover -s tests -v`. It uses the Python standard library. Passing these tests verifies the fixture, not the behavior of an agent using a skill.
 - **Workflow behavior:** evaluate representative requests and distinguish read-only recommendations from observed implementation, tool actions, and test execution. Record which level was actually exercised.
+- **Receipt helper:** from the repository root, run `python3 -B -m unittest discover -s code-change/evals -p test_workflow.py -v`. Its structural checks and telemetry parsing do not prove semantic ticket readiness, test-first edit order or trustworthy operator attestations.
 
 For changes to activation, routing, decisions or execution gates, use the shared [evaluation procedure](docs/skill-evaluation.md). It defines evidence and reporting conventions; its presence does not establish reliability or measured improvement. Existing skill-specific scenarios remain the owners of technical expectations.
 
@@ -75,6 +84,8 @@ A separate batch of three read-only web-platform scenarios checked native-patter
 The change-review workflow has been checked with a fresh-context batch of twelve supplied-record decision scenarios and a separate isolated Git/React review. The reviewer inspected pinned base/candidate content and reproduced stale-success and stale-error publication from a removed lifetime safeguard: six of eleven existing tests failed for that mechanism, while typecheck passed. One consolidated finding covered both consequences; source/index/refs were preserved. An independent empty-comparison control produced no findings and claimed no control test execution. This is review execution and defect reproduction, not a repair RED/GREEN cycle or measured general review precision/recall. Remote PRs, other stacks and all local-layer cases remain outside that execution evidence; the [review evaluation scenarios](code-review/evals/scenarios.md) distinguish those boundaries.
 
 The planning and plan-review workflows have been exercised in five bounded read-only cases: a compact documentation plan with automatic disclosed self-review, pricing-fixture discovery with grouped unanswered decisions, and three plan reviews covering a clean control, missing acceptance coverage and an unavailable external contract with an independent ready branch. The [validation record](plan/evals/validation.md) distinguishes actual repository reads from supplied-record review and lists unexercised routes. These runs establish neither product implementation nor installed hook activation, independent automatic-review execution or measured improvement.
+
+The task-decomposition skill includes distributed-flow boundary coverage and a CSV export example. Its [evaluation scenarios](task-decomposition/evals/scenarios.md) and [validation record](task-decomposition/evals/validation.md) distinguish supplied-record decomposition decisions from actual application implementation or assembled acceptance. Document checks and read-only task preparation do not establish working downloads or distributed integration.
 
 The readable-output skill includes a conditional explanation-format route and selected controlled-writing principles. A paired supplied-record evaluation compared the unchanged skill with an expanded version; both passed the initial eight result scenarios, while independent grading found no established overall clarity improvement. The [evaluation record](developer-readable-output/evals/validation.md) documents the correction, follow-up, and limits. These are response and format-decision checks, not rendered or executable demonstration validation, measured human comprehension, or STE compliance.
 

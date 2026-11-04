@@ -22,6 +22,7 @@ Read the shared boundaries, then the relevant route. References are conditional;
 
 | Request or situation | Read / use |
 |---|---|
+| Finish an explicit Planning or Development workflow, including an ordinary successful task | [Task retrospective](references/task-retrospective.md) |
 | Start or resume similar development work; find applicable experience | [Retrieve and apply](references/memory.md#retrieve-and-apply) |
 | Learn from a failure, review correction, or failed approach | [Extract a supported lesson](references/learning-cycle.md#extract-a-supported-lesson), then [Persist or revise](references/memory.md#persist-or-revise); use the [lesson template](assets/lesson.md) |
 | Repeated mistake, conflicting evidence, or outdated advice | [Reassess a lesson](references/learning-cycle.md#reassess-a-lesson), then [Persist or revise](references/memory.md#persist-or-revise) |

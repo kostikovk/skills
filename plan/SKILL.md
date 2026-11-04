@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Prepare an evidence-backed work plan before execution or revise an existing plan when scope, constraints or dependencies change. Investigate before asking questions, close material planning decisions, compose with task-decomposition when needed, and automatically finish through plan-review. Planning alone does not authorize implementation.
+description: Prepare an evidence-backed work plan or take a business request through discovery to a versioned Development Ticket for an independent executor. Investigate before questions, close material decisions, and automatically finish through plan-review. Planning alone does not authorize implementation.
 ---
 
 # Plan
@@ -21,6 +21,7 @@ Turn a selected outcome into an actionable route through preparation, delivery a
 
 | Need | Read | Prerequisite |
 |---|---|---|
+| Business idea, feature or bug request must become an independently usable Development Ticket | [Planning workflow](references/planning-workflow.md) | Apply requirements-definition and its ticket contract; retain all essential review gates |
 | Unanswered questions, conflicting evidence or recommendations | [Clarification](references/plan-contract.md#clarify-before-finalizing) | Identify selected scope and available sources |
 | Substantial plan, handoff or readiness check | [Plan record](references/plan-contract.md#plan-record) | Apply the essential gates; reuse project format |
 | Broad scope, existing backlog, small task or changed inputs | [Composition](references/composition.md) | Identify canonical requirements/decisions and existing tasks |
