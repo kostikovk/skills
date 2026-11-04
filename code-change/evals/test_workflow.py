@@ -1221,6 +1221,199 @@ class IntakeTests(Fixture):
                               supersedes=self.root / "run-1")
 
 
+def planned_assessment(root):
+    """Write a Planning assessment whose AC are feasible plans, not executed checks."""
+    supplied = assessment()
+    supplied["acceptance"]["AC-1"] = {"status": "planned", "evidence": "Process test defined; not executed"}
+    path = root / "planning-assessment.json"
+    path.write_text(json.dumps(supplied))
+    return path
+
+
+def assessment_file(root):
+    """Write the Development assessment to a file, as the CLI receives it."""
+    path = root / "assessment.json"
+    path.write_text(json.dumps(assessment()))
+    return path
+
+
+def snapshot_run(run_dir, *files):
+    """Bytes of every run file plus the given external files, to prove a refusal wrote nothing."""
+    state = {str(path.relative_to(run_dir)): path.read_bytes() for path in sorted(Path(run_dir).rglob("*"))
+             if path.is_file()}
+    state.update({str(path): path.read_bytes() for path in files})
+    return state
+
+
+class CloseTests(Fixture):
+    def planning_draft(self, blocking=None):
+        ticket = example_ticket()
+        ticket.update(status="draft", approval=None, blocking_questions=blocking or [])
+        self.write_ticket(ticket)
+        run_dir = self.root / "planning"
+        workflow.init_run(run_dir, "planning", "pricing", self.root)
+        workflow.note(run_dir, "module-start", "Existing-system discovery", module="P2")
+        workflow.record_command(run_dir, "discovery", "existing-tests", [sys.executable, "-c", "pass"], module="P2")
+        return run_dir
+
+    def development_cycle(self):
+        self.write_bound_ticket()
+        (self.root / "price.py").write_text("def quote(): return 10\n")
+        run_dir = self.root / "run"
+        workflow.init_run(run_dir, "development", "price-preview", self.root, self.path, sources=["price.py"])
+        check = behavior_check(self.root / "implemented")
+        workflow.record_command(run_dir, "red", "preview", check, module="D3")
+        workflow.note(run_dir, "red-confirmed", "Observed missing behavior assertion", label="preview")
+        (self.root / "price.py").write_text("def quote(): return 9\n")
+        (self.root / "implemented").write_text("implemented\n")
+        workflow.record_command(run_dir, "green", "preview", check, module="D3")
+        workflow.record_command(run_dir, "refactor", "preview", check, module="D3", reason="No cleanup")
+        workflow.record_command(run_dir, "verify", "suite", [sys.executable, "-c", "pass"], module="D4")
+        return run_dir
+
+    def test_should_complete_planning_when_close_is_called_once(self):
+        """should complete Planning with one close call after discovery receipts and a READY review"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        review = self.root / "review.md"
+        review.write_text("READY: no blocking findings\n")
+
+        actual = workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path,
+                                    review_file=review, ready=True)
+
+        self.assertTrue(actual["complete"], actual["gaps"])
+        self.assertEqual(json.loads(self.path.read_text())["status"], "ready")
+        self.assertIsNotNone(actual["time_to_ready_seconds"])
+        self.assertEqual((run_dir / "review-1.md").read_text(), "READY: no blocking findings\n")
+
+    def test_should_refuse_close_without_changes_when_review_is_missing(self):
+        """should refuse close and change nothing when no review has been recorded"""
+        run_dir = self.planning_draft()
+        before = snapshot_run(run_dir, self.path)
+
+        with self.assertRaisesRegex(ValueError, "Review record required before close"):
+            workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True)
+
+        self.assertEqual(snapshot_run(run_dir, self.path), before)
+
+    def test_should_refuse_close_without_changes_when_assessment_is_invalid(self):
+        """should refuse close and change nothing when the assessment is not valid JSON"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        broken = self.root / "broken.json"
+        broken.write_text("{not json")
+        before = snapshot_run(run_dir, self.path)
+
+        with self.assertRaises(ValueError):
+            workflow.close_run(run_dir, broken, ticket_path=self.path, ready=True)
+
+        self.assertEqual(snapshot_run(run_dir, self.path), before)
+
+    def test_should_refuse_ready_when_review_verdict_is_not_ready(self):
+        """should refuse to mark the ticket ready when the latest review verdict is REVISE"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="REVISE")
+        before = snapshot_run(run_dir, self.path)
+
+        with self.assertRaisesRegex(ValueError, "requires a READY review verdict"):
+            workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True)
+
+        self.assertEqual(snapshot_run(run_dir, self.path), before)
+
+    def test_should_refuse_ready_when_blocking_questions_remain(self):
+        """should refuse to mark the ticket ready when blocking questions remain"""
+        run_dir = self.planning_draft(blocking=["Which rate applies to gold?"])
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        before = snapshot_run(run_dir, self.path)
+
+        with self.assertRaisesRegex(ValueError, "blocking questions"):
+            workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True)
+
+        self.assertEqual(snapshot_run(run_dir, self.path), before)
+
+    def test_should_refuse_ticket_ready_when_manually_ready_ticket_lacks_ready_verdict(self):
+        """should refuse to record readiness for a hand-edited ready ticket without a READY verdict"""
+        run_dir = self.planning_draft()
+        ticket = json.loads(self.path.read_text())
+        ticket["status"] = "ready"
+        self.path.write_text(json.dumps(ticket))
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="BLOCKED")
+
+        with self.assertRaisesRegex(ValueError, "requires a READY review verdict"):
+            workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path)
+
+    def test_should_reject_review_verdict_outside_workflow(self):
+        """should reject a review verdict that belongs to the other workflow"""
+        run_dir = self.planning_draft()
+
+        with self.assertRaisesRegex(ValueError, "Unknown review verdict for planning: PASS"):
+            workflow.note(run_dir, "review", "Code review", verdict="PASS")
+
+    def test_should_complete_development_when_close_follows_final_review(self):
+        """should complete Development with one close call after a PASS review of the final change"""
+        run_dir = self.development_cycle()
+        workflow.note(run_dir, "review", "Independent code review", verdict="PASS")
+
+        actual = workflow.close_run(run_dir, assessment_file(self.root))
+
+        self.assertTrue(actual["complete"], actual["gaps"])
+        self.assertTrue((run_dir / "report.json").is_file())
+
+    def test_should_refuse_close_without_changes_when_review_predates_final_change(self):
+        """should refuse close when the review predates the final production change, even with a review file"""
+        self.write_bound_ticket()
+        (self.root / "price.py").write_text("def quote(): return 10\n")
+        run_dir = self.root / "run"
+        workflow.init_run(run_dir, "development", "price-preview", self.root, self.path, sources=["price.py"])
+        workflow.note(run_dir, "review", "Reviewed too early", verdict="PASS")
+        check = behavior_check(self.root / "implemented")
+        workflow.record_command(run_dir, "red", "preview", check)
+        workflow.note(run_dir, "red-confirmed", "Observed missing behavior assertion", label="preview")
+        (self.root / "price.py").write_text("def quote(): return 9\n")
+        (self.root / "implemented").write_text("implemented\n")
+        workflow.record_command(run_dir, "green", "preview", check)
+        workflow.record_command(run_dir, "refactor", "preview", check, reason="No cleanup")
+        workflow.record_command(run_dir, "verify", "suite", [sys.executable, "-c", "pass"])
+        review = self.root / "review.md"
+        review.write_text("PASS\n")
+        before = snapshot_run(run_dir)
+
+        with self.assertRaisesRegex(ValueError, "Review record missing after final change"):
+            workflow.close_run(run_dir, assessment_file(self.root), review_file=review)
+
+        self.assertEqual(snapshot_run(run_dir), before)
+
+    def test_should_refuse_development_close_when_review_verdict_is_changes(self):
+        """should refuse Development close when the latest review asked for changes"""
+        run_dir = self.development_cycle()
+        workflow.note(run_dir, "review", "Independent code review", verdict="CHANGES")
+
+        with self.assertRaisesRegex(ValueError, "Review verdict is CHANGES"):
+            workflow.close_run(run_dir, assessment_file(self.root))
+
+    def test_should_mark_auto_closed_modules_when_closing(self):
+        """should mark modules closed by close and exclude them from module durations"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+
+        actual = workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True)
+
+        self.assertEqual(actual["auto_closed_modules"], ["P2"])
+        self.assertNotIn("P2", actual["module_seconds"] or {})
+
+    def test_should_report_module_activity_from_wrapped_commands(self):
+        """should report per-module activity derived from wrapped commands"""
+        run_dir = self.development_cycle()
+        workflow.note(run_dir, "review", "Independent code review", verdict="PASS")
+
+        actual = workflow.close_run(run_dir, assessment_file(self.root))
+
+        self.assertEqual(actual["module_activity"]["D3"]["commands"], 3)
+        self.assertEqual(actual["module_activity"]["D3"]["failures"], 1)
+        self.assertEqual(actual["module_activity"]["D4"]["commands"], 1)
+        self.assertGreaterEqual(actual["module_activity"]["D3"]["command_seconds"], 0)
+
+
 class NativeTests(Fixture):
     def setUp(self):
         super().setUp()
@@ -1333,6 +1526,31 @@ class CliTests(Fixture):
         self.assertEqual(json.loads(self.path.read_text())["approval"]["reviewed_from"], "planning-report")
         self.assertEqual((intake["sources"], intake["doc_sources"], intake["test_sources"]),
                          (["price.py"], ["adr.md"], ["test_price.py"]))
+
+    def test_should_close_planning_in_one_command_when_invoked_from_cli(self):
+        """should close a reviewed Planning run with one close command from the CLI"""
+        ticket = example_ticket()
+        ticket.update(status="draft", approval=None)
+        self.write_ticket(ticket)
+        (self.root / "review.md").write_text("READY\n")
+        run_dir = self.root / "planning"
+        commands = [
+            ["init", str(run_dir), "--workflow", "planning", "--task", "pricing", "--repo", str(self.root)],
+            ["run", str(run_dir), "--module", "P2", "--phase", "discovery", "--label", "inventory", "--",
+             sys.executable, "-c", "pass"],
+            ["note", str(run_dir), "--kind", "review", "--verdict", "READY", "--module", "P7",
+             "--text", "Independent plan-review"],
+            ["close", str(run_dir), "--ticket", str(self.path), "--assessment", str(planned_assessment(self.root)),
+             "--review-file", str(self.root / "review.md"), "--ready"],
+        ]
+
+        actual = [subprocess.run([sys.executable, "-B", str(SCRIPT), *args],
+                                 cwd=self.root, capture_output=True, text=True) for args in commands]
+
+        for args, result in zip(commands, actual):
+            self.assertEqual(result.returncode, 0, f"{args[0]}: {result.stderr}{result.stdout}")
+        self.assertTrue(json.loads((run_dir / "report.json").read_text())["complete"])
+        self.assertEqual(json.loads(self.path.read_text())["status"], "ready")
 
     def test_should_return_failure_with_report_when_completion_evidence_is_absent(self):
         """should return failure with report when completion evidence is absent"""
