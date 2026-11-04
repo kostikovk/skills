@@ -55,6 +55,14 @@ The earlier `pi-engineer-os` repository is an optional source of ideas, not a de
 
 An installer, automatic project initialization, and complete tool adapters are not implemented here. Their eventual purpose is to configure the shared workflow for a project, after the skill composition is stable.
 
+The independent Planning and Development routes compose existing skills through a versioned ticket bundle. An optional standard-library command-receipt helper under `code-change/scripts/` captures local execution and imports native provider events without installing configuration. Its regression tests live under `code-change/evals/`. This adds local validation capability, not an installed runtime, tracker integration, trusted hook or universal TDD enforcement. The [workflow audit](docs/workflow-audit.md) records architecture and decisions; the [workflow evaluation](docs/workflow-evaluation.md) records observed coverage separately.
+
+The helper separates structural completion from unverified TDD compliance, checks
+retained command-log integrity, and can snapshot explicitly selected source files
+to flag sampled ordering contradictions and stale verification. These local checks
+cannot certify behavioral failure semantics or complete action coverage; see the
+[TDD hardening record](docs/tdd-integration-validation.md) for exercised boundaries.
+
 ## Validation boundaries
 
 There is no repository-wide application build or test pipeline. Choose checks for the changed artifact:
@@ -63,6 +71,7 @@ There is no repository-wide application build or test pipeline. Choose checks fo
 - **Skill format:** when available, run a skill validator such as `quick_validate.py` from an installed `skill-creator` skill against each changed skill directory. That external validator may need dependencies; it is not a bundled repository command. Format success does not prove the skill's decisions or execution order.
 - **Synthetic fixture:** from `design-decision/evals/fixtures/project-precedent`, run `python3 -B -m unittest discover -s tests -v`. It uses the Python standard library. Passing these tests verifies the fixture, not the behavior of an agent using a skill.
 - **Workflow behavior:** evaluate representative requests and distinguish read-only recommendations from observed implementation, tool actions, and test execution. Record which level was actually exercised.
+- **Receipt helper:** from the repository root, run `python3 -B -m unittest discover -s code-change/evals -p test_workflow.py -v`. Its structural checks and telemetry parsing do not prove semantic ticket readiness, test-first edit order or trustworthy operator attestations.
 
 For changes to activation, routing, decisions or execution gates, use the shared [evaluation procedure](docs/skill-evaluation.md). It defines evidence and reporting conventions; its presence does not establish reliability or measured improvement. Existing skill-specific scenarios remain the owners of technical expectations.
 

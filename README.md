@@ -16,13 +16,13 @@ Each skill guides an agent's decisions for a concrete software engineering task,
 Canonical activation scopes, responsibilities, statuses, and priorities live in [SKILLS.md](SKILLS.md#core-skills).
 
 - **Product, planning, and design:**
-  - [requirements-definition](requirements-definition/SKILL.md) — scoped product requirements, acceptance examples, and explicit open decisions
-  - [plan](plan/SKILL.md) — repository-grounded work planning with grouped clarification and mandatory `plan-review` completion
+  - [requirements-definition](requirements-definition/SKILL.md) — scoped requirements, acceptance examples, open decisions and the versioned Development Ticket
+  - [plan](plan/SKILL.md) — work planning or business request-to-ticket Planning, with discovery and mandatory `plan-review`
   - [plan-review](plan-review/SKILL.md) — read-only plan critique against requirements, code facts, dependencies, and verification (`READY` / `REVISE` / `BLOCKED`)
   - [task-decomposition](task-decomposition/SKILL.md) — vertical behavioral slices, technical tasks, enablers, spikes, and assembled-scenario acceptance
   - [design-decision](design-decision/SKILL.md) — evidence-backed trade-off analysis for architecture, boundaries, data structures, patterns, API contracts, and ADRs
 - **Implementation, testing, and stack guidance:**
-  - [code-change](code-change/SKILL.md) — discovery-first implementation choices (reuse, extension, extraction, or new code) under KISS, YAGNI, DRY, and SOLID
+  - [code-change](code-change/SKILL.md) — discovery-first implementation and independent approved-ticket Development through verification, review and learning
   - [tdd-workflow](tdd-workflow/SKILL.md) — `RED → GREEN → REFACTOR` execution order, test-backed issue reproduction, and change classification
   - [aaa-testing](aaa-testing/SKILL.md) — Arrange–Act–Assert structure and `should <behavior> when <condition>` scenario titles (Go, Vitest, Bun, React, Vue)
   - [frontend-code](frontend-code/SKILL.md) — UI state ownership, effects, accessibility, native web platform checks, async states, and version-aware React / Next.js routes
@@ -31,7 +31,7 @@ Canonical activation scopes, responsibilities, statuses, and priorities live in 
   - [debugging](debugging/SKILL.md) — test-backed failure reproduction, minimization, and causal hypothesis testing before any authorized repair
   - [code-review](code-review/SKILL.md) — snapshot-aware diff and PR review for task fidelity, regressions, and impact-ranked defects
   - [git-delivery](git-delivery/SKILL.md) — task branch/worktree isolation before edits, verified Conventional Commits, PR preparation, and post-merge cleanup
-  - [learn-from-mistakes](learn-from-mistakes/SKILL.md) — evidence-backed lessons from mistakes or corrections and retrieval before similar work
+  - [learn-from-mistakes](learn-from-mistakes/SKILL.md) — evidence-backed lessons, retrieval before similar work and explicit workflow retrospectives
   - [developer-readable-output](developer-readable-output/SKILL.md) — clear developer communication, appropriate explanation formats, and preserved technical evidence
 
 ## How the skills compose
@@ -58,6 +58,8 @@ Investigation & Review (read-only until fixes are authorized):
 ```
 
 Cross-cutting skills operate alongside these flows: [learn-from-mistakes](learn-from-mistakes/SKILL.md) retrieves or records verified lessons, and [developer-readable-output](developer-readable-output/SKILL.md) formats human-facing explanations, reviews, plans, and reports.
+
+For independent sessions, start [Planning](plan/references/planning-workflow.md) to generate a five-section [ticket bundle](requirements-definition/references/development-ticket.md), then start [Development](code-change/references/development-workflow.md) with its approved revision. The optional [receipt helper and runnable examples](code-change/references/execution-evidence.md) capture actual commands, native provider usage and task retrospectives. Existing direct bounded changes remain supported; no new skill, provider setup or task tracker is required.
 
 - **Proportional process depth:** a small, clear change goes straight to `code-change` + `tdd-workflow` + `aaa-testing`. Broad or ambiguous work uses `requirements-definition`, `plan` (with mandatory `plan-review`), `task-decomposition`, and `design-decision` as needed.
 - **Test-backed verification:** executable code changes, bug reproductions in `debugging`, and defect confirmations in `code-review` rely on executed tests under `tdd-workflow` rather than static guesswork alone. When test execution is blocked, skills report the candidate and verification gap explicitly.
@@ -120,3 +122,4 @@ Choose checks matching the changed artifact:
   cd design-decision/evals/fixtures/project-precedent
   python3 -B -m unittest discover -s tests -v
   ```
+- **Workflow helper regression tests (from the repository root):** `python3 -B -m unittest discover -s code-change/evals -p test_workflow.py -v`. These check the helper; [workflow evaluation](docs/workflow-evaluation.md) distinguishes them from agent execution.

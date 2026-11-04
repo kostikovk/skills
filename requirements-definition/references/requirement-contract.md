@@ -30,6 +30,8 @@ Write each requirement so its behavior can be checked without choosing internal 
 
 A compact clear task can state the parent need, behavior, applicable constraints and acceptance directly. IDs and a separate document are useful when there are multiple linked requirements, parallel work or ongoing change tracking, not a prerequisite for every edit.
 
+For an independently consumed Planning-to-Development handoff, use the [Development Ticket representation](development-ticket.md). It carries these semantics in five sections; it does not introduce a second source of requirements. Existing trackers can carry the same information without migrating their format.
+
 ## Scope readiness
 
 Readiness applies to a specified scope and contract version, not the entire product request by default. State:

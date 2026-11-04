@@ -1,6 +1,6 @@
 ---
 name: code-change
-description: Ground production code changes in existing behavior before implementing a feature, fixing a bug, or refactoring. Find reusable functions, components, hooks, services, and library capabilities; choose reuse, compatible extension, extraction, or new code using practical KISS, YAGNI, DRY, and SOLID criteria. Use for implementation tasks; design-only decisions and review-only requests keep their own workflows.
+description: Implement features, fixes or refactors grounded in existing behavior, directly for a bounded request or through the Development workflow from an approved versioned ticket. Find reusable capabilities and choose the smallest correct change. Design-only and review-only requests keep their own workflows.
 ---
 
 # Code Change
@@ -36,6 +36,7 @@ A fragment identifies a heading, not an automatic partial read. Locate it and re
 
 | Situation after discovery | Read | Prerequisite |
 |---|---|---|
+| Start or resume Development from an approved ticket in this or a fresh session | [Development workflow](references/development-workflow.md) | Read the ticket contract, preserve its revision and apply existing workspace/TDD/AAA gates |
 | A shared operation needs extraction or a wrapper may be redundant | [Extract shared knowledge deliberately](references/reuse-and-principles.md#extract-shared-knowledge-deliberately) | Compare existing implementations and callers first |
 | Choosing or evaluating implementation structure | [Apply principles to the observed problem](references/reuse-and-principles.md#apply-principles-to-the-observed-problem) | Apply relevant criteria to the observed change; read extraction guidance too when extracting |
 | Adding or changing an API | [Keep API contracts synchronized](references/api-contracts.md#keep-api-contracts-synchronized) | Identify routes, contract source and consumers before changing behavior |

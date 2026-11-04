@@ -45,6 +45,7 @@ Classification and the applicable RED/GREEN/REFACTOR gates below are mandatory; 
 | Revisit what qualifies as execution evidence | [What counts as evidence](references/red-green-refactor.md#what-counts-as-evidence); the phase gates below still apply |
 | Configure persistent invocation in project instructions | [Persistent invocation](references/activation.md); classify runtime configuration changes before editing |
 | Verify the origin of the cycle guidance | [Sources and adaptation](references/red-green-refactor.md#sources-and-adaptation) |
+| Retain machine-readable receipts for an explicit Planning/Development workflow | [Execution evidence](../code-change/references/execution-evidence.md) |
 
 ## RED — prove the behavior is missing
 
@@ -74,7 +75,22 @@ Classification and the applicable RED/GREEN/REFACTOR gates below are mandatory; 
 
 ## Evidence and recovery
 
+For an approved-ticket Development handoff, receive the pinned ticket ID/revision,
+selected AC, invariants, affected behavior/code, testing conventions and required
+verification checks from code-change. Return scenario-to-AC links, actual phase
+commands/exit codes/output, source/action references where available, refactor
+assessment/retest, verification results, unresolved failures and measured telemetry.
+Use the existing work record or [receipt conventions](../code-change/references/execution-evidence.md);
+do not require a new ticket or engine for an ordinary bounded change.
+
 Report the behaviors covered, files changed, actual RED failure, GREEN command/results, refactoring performed or deemed unnecessary, and final checks. Keep this concise; retain useful runner output rather than creating a mandatory report file. Distinguish commands run from suggestions and environmental blockers from test failures.
+
+Separate independently inspected evidence, unverified agent/operator claims and
+contradictory or failed evidence. A helper's structural `complete=true` is never a
+verified TDD verdict. Claim verified compliance only for the bounded cycles whose
+test semantics, pre-change RED, action/source order, preserved assertions and
+passing retests were independently inspected; name that inspection and its limits.
+If action coverage is missing, keep order unverified even when the tests pass.
 
 If implementation was started before RED, acknowledge the missed gate. Preserve existing user work and unrelated edits; do not automatically delete or rewrite code to manufacture a test-first history. Isolate or safely reverse only your own unverified behavior change, observe the test against the pre-change behavior, then continue. If that cannot be done safely, report the gap instead of claiming a TDD cycle.
 
