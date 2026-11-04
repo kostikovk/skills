@@ -20,6 +20,7 @@ This repository stores personal development skills shared across projects. A ski
 | `*/SKILL.md` | A skill's activation scope, shared boundaries, required workflow, and conditional navigation |
 | `*/references/*.md` | Focused procedures, examples, or sources selected by the skill's navigation |
 | `docs/skill-evaluation.md` | Shared authoring/evaluation procedure; scenario independence, result/execution evidence, comparison and failure routing |
+| `docs/validation-index.md` | Every validation record with its level and whether its evidence is durable |
 | This file | Stable project context, file organization, scope, and limits of available validation |
 
 Treat the actual working tree as the source of truth for current branches, changes, and file availability. These documents do not grant permissions beyond the user's task and the active environment.
@@ -71,7 +72,7 @@ There is no repository-wide application build or test pipeline. Choose checks fo
 - **Skill format:** when available, run a skill validator such as `quick_validate.py` from an installed `skill-creator` skill against each changed skill directory. That external validator may need dependencies; it is not a bundled repository command. Format success does not prove the skill's decisions or execution order.
 - **Synthetic fixture:** from `design-decision/evals/fixtures/project-precedent`, run `python3 -B -m unittest discover -s tests -v`. It uses the Python standard library. Passing these tests verifies the fixture, not the behavior of an agent using a skill.
 - **Workflow behavior:** evaluate representative requests and distinguish read-only recommendations from observed implementation, tool actions, and test execution. Record which level was actually exercised.
-- **Receipt helper:** from the repository root, run `python3 -B -m unittest discover -s code-change/evals -p test_workflow.py -v`. Its structural checks and telemetry parsing do not prove semantic ticket readiness, test-first edit order or trustworthy operator attestations.
+- **Receipt helper:** from the repository root, run `python3 -B -m unittest discover -s code-change/evals -p 'test_*.py' -v` (helper regression tests and the end-to-end CLI eval). The helper separates production (`--source`), test (`--test-source`) and document (`--doc-source`) files, binds approval to reviewed content with `approve`, finishes runs with `close` and can write per-run retrospective rows with `--ledger`. Its structural checks and telemetry parsing do not prove semantic ticket readiness, test-first edit order or trustworthy operator attestations. The [validation index](docs/validation-index.md) lists every validation record and whether its evidence is durable.
 
 Every available skill now has skill-local evaluation material linked from its entrypoint. The AAA, Git delivery, Go, requirements and TDD scenario suites are specifications, not completed agent runs. Receipt-helper tests and fixture tests remain separately executable; shared historical workflow records do not establish full coverage of these new suites.
 

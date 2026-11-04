@@ -122,4 +122,4 @@ Choose checks matching the changed artifact:
   cd design-decision/evals/fixtures/project-precedent
   python3 -B -m unittest discover -s tests -v
   ```
-- **Workflow helper regression tests (from the repository root):** `python3 -B -m unittest discover -s code-change/evals -p test_workflow.py -v`. These check the helper; [workflow evaluation](docs/workflow-evaluation.md) distinguishes them from agent execution.
+- **Workflow helper tests (from the repository root):** `python3 -B -m unittest discover -s code-change/evals -p 'test_*.py' -v` runs the helper regression tests and the end-to-end CLI eval. These check the helper, not agent behavior; the [validation index](docs/validation-index.md) lists which records reached agent execution.
