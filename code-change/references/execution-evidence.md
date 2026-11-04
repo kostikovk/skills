@@ -12,8 +12,8 @@ python3 -B "$helper" init /tmp/pricing-plan --workflow planning --task pricing -
 python3 -B "$helper" note /tmp/pricing-plan --kind module-start --module P2 --text 'Start current-state discovery'
 python3 -B "$helper" run /tmp/pricing-plan --module P2 --phase discovery --label existing-tests -- python3 -B -m unittest discover -s tests -v
 python3 -B "$helper" note /tmp/pricing-plan --kind module-end --module P2 --text 'Source, callers and tests inspected'
-python3 -B "$helper" run /tmp/pricing-plan --module P5 --phase verify --label ticket-format -- python3 -B "$helper" ticket /path/to/bundle/ticket.json
-python3 -B "$helper" note /tmp/pricing-plan --kind review --module P5 --text 'Independent plan-review READY; see review.md'
+python3 -B "$helper" run /tmp/pricing-plan --module P6 --phase verify --label ticket-format -- python3 -B "$helper" ticket /path/to/bundle/ticket.json
+python3 -B "$helper" note /tmp/pricing-plan --kind review --module P7 --text 'Independent plan-review READY; see review.md'
 python3 -B "$helper" note /tmp/pricing-plan --kind ticket-ready --text 'Reviewed ticket revision 1 ready'
 python3 -B "$helper" report /tmp/pricing-plan --ticket /path/to/bundle/ticket.json --assessment /path/to/planning-assessment.json
 # Only with actual implementation authority:
@@ -30,15 +30,15 @@ The Planning report carries `ticket_content_sha256`, a SHA-256 of the ticket's i
 python3 -B "$helper" init /tmp/pricing-dev --workflow development --task pricing --repo /path/to/project --ticket /path/to/bundle/ticket.json --source pricing.py --test-source tests/test_pricing.py --doc-source docs/pricing.md
 python3 -B "$helper" run /tmp/pricing-dev --phase baseline --label existing-suite -- python3 -B -m unittest discover -s tests -v
 # Write the next behavioral test before changing production behavior.
-python3 -B "$helper" run /tmp/pricing-dev --module D4 --phase red --label preview-1 -- python3 -B -m unittest discover -s tests -v
+python3 -B "$helper" run /tmp/pricing-dev --module D3 --phase red --label preview-1 -- python3 -B -m unittest discover -s tests -v
 # This command preserves the failing exit code. Inspect its command-N.log.
 python3 -B "$helper" note /tmp/pricing-dev --kind red-confirmed --label preview-1 --text 'Observed expected missing-preview assertion; not a setup failure'
 # Implement the smallest change, then run the same focused/regression checks.
-python3 -B "$helper" run /tmp/pricing-dev --module D4 --phase green --label preview-1 -- python3 -B -m unittest discover -s tests -v
+python3 -B "$helper" run /tmp/pricing-dev --module D3 --phase green --label preview-1 -- python3 -B -m unittest discover -s tests -v
 # Assess/simplify only after GREEN; no artificial cleanup is required.
-python3 -B "$helper" run /tmp/pricing-dev --module D4 --phase refactor --label preview-1 --reason 'Shared operation reused; no further useful simplification' -- python3 -B -m unittest discover -s tests -v
-python3 -B "$helper" run /tmp/pricing-dev --module D5 --phase verify --label required-suite -- python3 -B -m unittest discover -s tests -v
-python3 -B "$helper" note /tmp/pricing-dev --kind review --module D6 --text 'Independent review of final diff; no supported findings'
+python3 -B "$helper" run /tmp/pricing-dev --module D3 --phase refactor --label preview-1 --reason 'Shared operation reused; no further useful simplification' -- python3 -B -m unittest discover -s tests -v
+python3 -B "$helper" run /tmp/pricing-dev --module D4 --phase verify --label required-suite -- python3 -B -m unittest discover -s tests -v
+python3 -B "$helper" note /tmp/pricing-dev --kind review --module D5 --text 'Independent review of final diff; no supported findings'
 python3 -B "$helper" report /tmp/pricing-dev --assessment /path/to/completion.json
 ```
 
@@ -138,7 +138,7 @@ CLI flags/capabilities are documented in [Codex noninteractive mode](https://lea
 | Task/run, workflow, ticket revision, repository revision | Actual local intake; provider/model/session flags are explicitly operator-supplied unless native events expose them; uncommitted source identity additionally needs the reviewed diff/action trace |
 | Helper version and phase attempts | Intake script SHA-256, receipt format version and per-cycle/per-phase recorded attempt counts; attempts include setup failures and are not inferred unplanned rework |
 | Command activity/failures/output/durations | Actual wrapped subprocess, UTC timestamps and monotonic elapsed time; expected RED counts as nonzero, not automatically unplanned rework |
-| Module durations | Paired `module-start`/`module-end` markers; module IDs are validated per workflow (Planning `P1`–`P6`, Development `D1`–`D7`, also for `run --module`); marker interval includes waiting and human time, not just model compute; absent intervals are unavailable |
+| Module durations | Paired `module-start`/`module-end` markers; module IDs are validated per workflow (Planning `P1`–`P8`, Development `D0`–`D7` as in the target diagrams, also for `run --module`; a run without `module_scheme` started under the earlier `P1`–`P6`/`D1`–`D7` scheme and keeps it); marker interval includes waiting and human time, not just model compute; absent intervals are unavailable |
 | Time to first recorded RED and RED→GREEN | Actual receipt times; labels may include invalid/setup failures and therefore do not establish compliant TDD latency; semantic RED and prior edit order need trace inspection |
 | Time to ready | Actual `ticket-ready` marker after review; absent marker yields null |
 | Time to verified completion | Delivery/action timestamps establish the endpoint; report exposes elapsed-to-report rather than inventing a completion time |

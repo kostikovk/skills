@@ -284,8 +284,8 @@ class CompletionTests(Fixture):
         self.cycle()
         workflow.record_command(self.run_dir, "verify", "suite", [sys.executable, "-c", "exit(1)"])
         workflow.record_command(self.run_dir, "verify", "suite", [sys.executable, "-c", "exit(0)"])
-        workflow.note(self.run_dir, "module-start", "Verify", module="D5")
-        workflow.note(self.run_dir, "module-end", "Verified", module="D5")
+        workflow.note(self.run_dir, "module-start", "Verify", module="D4")
+        workflow.note(self.run_dir, "module-end", "Verified", module="D4")
 
         workflow.note(self.run_dir, "review", "Reviewed final diff and evidence")
 
@@ -295,7 +295,7 @@ class CompletionTests(Fixture):
         self.assertEqual(actual["ticket_revision"], 1)
         self.assertGreaterEqual(actual["time_to_first_red_seconds"], 0)
         self.assertGreaterEqual(actual["red_to_green_seconds"]["preview"], 0)
-        self.assertGreaterEqual(actual["module_seconds"]["D5"], 0)
+        self.assertGreaterEqual(actual["module_seconds"]["D4"], 0)
         self.assertIsNone(actual["provider_usage"])
         self.assertEqual(actual["assessment_source"], "operator-attested; not semantically verified")
 
@@ -1051,11 +1051,45 @@ class MarkerTests(Fixture):
             ("planning note uses D1", lambda: workflow.note(run_dir, "module-start", "x", module="D1"), "planning: D1"),
             ("development run uses P2", lambda: workflow.record_command(
                 development, "discovery", "scan", [sys.executable, "-c", "pass"], module="P2"), "development: P2"),
+            ("development note uses D8", lambda: workflow.note(development, "module-start", "x", module="D8"),
+             "development: D8"),
         ]
         for name, act, message in cases:
             with self.subTest(scenario=f"should reject module when {name}"):
                 with self.assertRaisesRegex(ValueError, f"Unknown module for {message}"):
                     act()
+
+    def test_should_accept_module_when_id_is_in_target_range(self):
+        """should accept the target diagram's module IDs P1-P8 and D0-D7"""
+        run_dir = self.planning_run()
+        self.write_bound_ticket()
+        development = self.root / "run"
+        workflow.init_run(development, "development", "price-preview", self.root, self.path)
+
+        planning_note = workflow.note(run_dir, "module-start", "Publish versioned ticket", module="P8")
+        development_note = workflow.note(development, "module-start", "Session initialization", module="D0")
+
+        self.assertEqual((planning_note["module"], development_note["module"]), ("P8", "D0"))
+
+    def test_should_record_module_scheme_when_run_starts(self):
+        """should record the module scheme when a run starts"""
+        actual = workflow.init_run(self.root / "planning", "planning", "pricing", self.root)
+
+        self.assertEqual(actual["module_scheme"], 2)
+
+    def test_should_validate_legacy_ids_when_run_has_no_module_scheme(self):
+        """should validate new markers against scheme 1 when an in-flight run has no module scheme"""
+        run_dir = self.root / "planning"
+        workflow.init_run(run_dir, "planning", "pricing", self.root)
+        metadata = json.loads((run_dir / "run.json").read_text())
+        del metadata["module_scheme"]
+        (run_dir / "run.json").write_text(json.dumps(metadata))
+
+        legacy = workflow.note(run_dir, "module-start", "Legacy readiness", module="P6")
+
+        self.assertEqual(legacy["module"], "P6")
+        with self.assertRaisesRegex(ValueError, "Unknown module for planning: P7"):
+            workflow.note(run_dir, "module-start", "Target review", module="P7")
 
     def test_should_keep_planning_incomplete_without_ready_marker(self):
         """should keep Planning incomplete when the readiness marker is missing or precedes the final command"""
@@ -1278,9 +1312,9 @@ class CliTests(Fixture):
         planning, development = self.root / "planning", self.root / "run"
         commands = [
             ["init", str(planning), "--workflow", "planning", "--task", "pricing", "--repo", str(self.root)],
-            ["run", str(planning), "--module", "P5", "--phase", "verify", "--label", "ticket-format", "--",
+            ["run", str(planning), "--module", "P6", "--phase", "verify", "--label", "ticket-format", "--",
              sys.executable, "-B", str(SCRIPT), "ticket", str(self.path)],
-            ["note", str(planning), "--kind", "review", "--module", "P5", "--text", "Independent review READY"],
+            ["note", str(planning), "--kind", "review", "--module", "P7", "--text", "Independent review READY"],
             ["note", str(planning), "--kind", "ticket-ready", "--text", "Reviewed revision 1 ready"],
             ["report", str(planning), "--ticket", str(self.path),
              "--assessment", str(self.root / "planning-assessment.json")],

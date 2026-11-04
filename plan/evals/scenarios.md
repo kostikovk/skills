@@ -10,7 +10,7 @@ Assess discovery before questions, coherent clarification, selected-scope closur
 
 ## Raw inputs
 
-Use realistic project artifacts matching each request; do not give invented code locations as repository facts. Supply actual code/contracts or clearly labeled supplied records and record the distinction.
+Use realistic project artifacts matching each request; do not give invented code locations as repository facts. Supply actual code/contracts or clearly labeled supplied records and record the distinction. Scenario IDs below are case numbers, not the Planning module IDs `P1`–`P8` of the [Planning workflow](../references/planning-workflow.md).
 
 | ID | Request to give the performer |
 |---|---|

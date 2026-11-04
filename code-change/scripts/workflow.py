@@ -17,11 +17,15 @@ SECTIONS = {"outcome", "current_state_gap", "acceptance_criteria",
 NOTE_KINDS = {"module-start", "module-end", "red-confirmed", "ticket-ready", "review", "clarification",
               "evidence-gap", "missed-functionality", "unexpected-dependency", "migration",
               "ticket-rework", "rework", "human"}
-MODULES = {"planning": {f"P{n}" for n in range(1, 7)}, "development": {f"D{n}" for n in range(1, 8)}}
+# Scheme 2 follows the target Planning/Development diagrams; runs without a recorded
+# scheme started under scheme 1 and keep its IDs so one run never mixes meanings.
+MODULE_SCHEME = 2
+MODULES = {1: {"planning": {f"P{n}" for n in range(1, 7)}, "development": {f"D{n}" for n in range(1, 8)}},
+           2: {"planning": {f"P{n}" for n in range(1, 9)}, "development": {f"D{n}" for n in range(0, 8)}}}
 
 
 def check_module(metadata, module):
-    require(module is None or module in MODULES[metadata["workflow"]],
+    require(module is None or module in MODULES[metadata.get("module_scheme", 1)][metadata["workflow"]],
             f"Unknown module for {metadata['workflow']}: {module}")
 
 
@@ -197,7 +201,7 @@ def init_run(run_dir, workflow_name, task_id, repo, ticket_path=None,
                 "ticket_revision": ticket["revision"] if ticket else None, "inputs": inputs}
     metadata.update(groups)
     metadata.update(workspace=workspace, predecessor=predecessor,
-                    ticket_id=ticket["id"] if ticket else None)
+                    ticket_id=ticket["id"] if ticket else None, module_scheme=MODULE_SCHEME)
     metadata["source_intake"] = snapshot_sources(run_dir, repo, selected, "intake")
     write_json(run_dir / "run.json", metadata)
     (run_dir / "events.jsonl").touch()

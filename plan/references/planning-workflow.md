@@ -8,16 +8,18 @@ IDs locate logical capabilities, not separate agents or an executable module reg
 
 | ID / applicability | Input → output | Completion gate / recorded evidence |
 |---|---|---|
-| P1 Intent, every request | Request and authoritative context → AIM, GOAL, selected scope | Sourced observable result; record missing decisions without inventing them |
-| P2 Current state, before proposed change | Scope and accessible system → source/test/contract discovery; relevant API/schema/data subcapabilities | Investigate existing/partial capability, reuse and configuration/data/no-code alternatives; record inspected sources and unavailable access |
-| P3 Gap & impact, after discovery | Desired/current behavior → actual gap, affected consumers and risks | Assess relevant upstream/downstream contracts, data migration/backfill, compatibility, deployment/rollback and operational implications; distinguish facts/inferences/unknowns |
-| P4 Finalize, selected ready or blocked scope | Findings and product decisions → five-section ticket plus separate discovery | Use the canonical ticket representation; precise AC and invariants; keep blocked questions explicit |
-| P5 Readiness, before ready output | Candidate, sources and optional tasks → reviewed verdict | Apply the ticket readiness gate and mandatory plan-review; retain its independence and limits; correct/re-review supported defects |
-| P6 Publication/handoff, after reviewed disposition | Reviewed ticket and authority → versioned transferable bundle or existing tracker revision | All deciding context accessible in fresh session; preserve ID/revision/status and actual approval source; publish externally only when authorized |
+| P1 Intent & requirements, every request | Request and authoritative context → AIM, GOAL, selected scope | Sourced observable result; record missing decisions without inventing them |
+| P2 Existing-system discovery, before proposed change | Scope and accessible system → source/test/contract discovery; relevant API/schema/data subcapabilities | Investigate existing/partial capability, reuse and configuration/data/no-code alternatives; record inspected sources and unavailable access |
+| P3 Current vs expected, after discovery | Desired/current behavior → actual gap and whether a change is needed | Distinguish facts/inferences/unknowns; a satisfied goal becomes a redirected disposition, not code work |
+| P4 System impact, when a change is needed | Gap → affected services, consumers and dependencies | Assess relevant upstream/downstream contracts, data migration/backfill, compatibility, deployment/rollback and operational implications |
+| P5 Risk, when a change is needed | Impact → material risks, mitigations and unknowns | Record each material risk with its mitigation or bounded investigation; deciding unknowns stay explicit |
+| P6 Requirements finalization, selected ready or blocked scope | Findings and product decisions → five-section ticket plus separate discovery | Use the canonical ticket representation; precise AC and invariants; keep blocked questions explicit |
+| P7 Plan review, before ready output | Candidate, sources and optional tasks → reviewed verdict | Apply the ticket readiness gate and mandatory plan-review; retain its independence and limits; correct/re-review supported defects |
+| P8 Publication, handoff and approval, after reviewed disposition | Reviewed ticket and authority → versioned transferable bundle or existing tracker revision | All deciding context accessible in fresh session; preserve ID/revision/status and actual approval source; publish externally only when authorized |
 
 P2 is read-only system discovery, including any relevant existing tests and architecture. Running safe local checks can establish current behavior but is not mandatory production access. Inspect real production data only with explicit authorization; do not mutate it during Planning. If data/configuration already explains the issue, redirect to the appropriate authorized owner. Do not create code work merely because the input was phrased as a feature.
 
-P3 follows actual participating boundaries. Use [task-decomposition](../../task-decomposition/SKILL.md) only when multiple slices/tasks are needed; it owns their dependency contracts and assembled acceptance. Development chooses technical implementation details. A ticket need not prescribe classes, files or algorithms unless they are genuine sourced constraints.
+P4 follows actual participating boundaries. Use [task-decomposition](../../task-decomposition/SKILL.md) only when multiple slices/tasks are needed; it owns their dependency contracts and assembled acceptance. Development chooses technical implementation details. A ticket need not prescribe classes, files or algorithms unless they are genuine sourced constraints.
 
 ## Execution and reporting
 
