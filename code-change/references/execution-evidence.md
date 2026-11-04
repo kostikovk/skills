@@ -19,9 +19,9 @@ python3 -B "$helper" approve /path/to/bundle/ticket.json --reviewed /tmp/pricing
 ```
 
 Record `review` with its verdict when the review actually happens (Planning `READY`/`REVISE`/`BLOCKED`, Development `PASS`/`CHANGES`); the timestamp is an actual marker. Then finish with one `close`. It checks every precondition before writing anything and exits 2 without changes when one fails:
-- the assessment parses and its `acceptance`, `review` and `retrospective` are objects, the review file is readable, a `--ledger` path is a directory or absent, Planning has `--ticket`;
+- the assessment parses, its `acceptance`, `review` and `retrospective` are objects and its classification is a list of names, the review file is readable, a `--ledger` path is a directory or absent, Planning has `--ticket`;
 - a review with a verdict exists and follows the final change (Development: last GREEN/REFACTOR and observed production/test change; Planning: last ticket-format check or ticket rework) — `close` never records the review itself;
-- recording readiness or a redirected disposition needs the latest Planning verdict `READY`, and `--ready` needs a draft ticket without blocking questions; Development refuses a `CHANGES` verdict.
+- recording readiness or a redirected disposition needs the latest Planning verdict `READY`, and `--ready` needs a draft (or, on a retry, already ready) ticket without blocking questions; Development refuses a `CHANGES` verdict.
 
 `close` then keeps the review file as evidence of that review, runs the ticket format check as a `verify` receipt and records `ticket-ready` (Planning), ends open modules as `auto_closed`, and writes `report.json`; its exit code is the report's. Paths are resolved against the caller's directory. If the report is incomplete, fix the cause and run `close` again; its own format receipt does not count as a ticket change. A ready or approved Planning ticket is incomplete without `review` and a later `ticket-ready`; redirected Planning needs `review`. Redirected Planning can complete without development AC; blocked Planning retains an incomplete report and clarification.
 

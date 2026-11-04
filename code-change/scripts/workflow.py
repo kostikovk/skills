@@ -362,7 +362,8 @@ def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, read
                       + [event["sequence"] for event in recorded if event["kind"] == "ticket-rework"], default=0)
         require(latest["sequence"] > changed, "Review record missing after final ticket change")
         if ready:
-            require(ticket["status"] == "draft", "Ready requires a draft ticket")
+            # An already-ready ticket is the documented retry after an incomplete close.
+            require(ticket["status"] in {"draft", "ready"}, "Ready requires a draft ticket")
             require(not ticket["blocking_questions"], "Ready requires no blocking questions")
             ticket = check_ticket({**ticket, "status": "ready"}, ticket_path.parent)
         if ticket["status"] in {"ready", "approved"}:
@@ -434,6 +435,9 @@ def check_assessment(supplied):
         require(key not in supplied or isinstance(supplied[key], dict), f"Assessment {key} must be an object")
     require(all(isinstance(entry, dict) for entry in supplied.get("acceptance", {}).values()),
             "Assessment acceptance entries must be objects")
+    classification = supplied.get("retrospective", {}).get("classification", [])
+    require(isinstance(classification, list) and all(isinstance(item, str) for item in classification),
+            "Assessment retrospective classification must be a list of names")
 
 
 def summarize_ledger(directory):

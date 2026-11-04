@@ -1443,6 +1443,35 @@ class CloseTests(ClosingFixture):
         self.assertFalse(first["complete"])
         self.assertTrue(second["complete"], second["gaps"])
 
+    def test_should_complete_when_same_ready_close_is_repeated_after_incomplete_result(self):
+        """should accept the documented retry: the same close --ready after an incomplete first result"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        lacking = self.root / "lacking.json"
+        supplied = json.loads(planned_assessment(self.root).read_text())
+        del supplied["acceptance"]
+        lacking.write_text(json.dumps(supplied))
+        workflow.close_run(run_dir, lacking, ticket_path=self.path, ready=True)
+
+        actual = workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True)
+
+        self.assertTrue(actual["complete"], actual["gaps"])
+
+    def test_should_refuse_close_without_changes_when_classification_item_is_not_a_name(self):
+        """should refuse close and change nothing when a retrospective classification entry is not a name"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        supplied = json.loads(planned_assessment(self.root).read_text())
+        supplied["retrospective"]["classification"] = [{"name": "planning"}]
+        path = self.root / "classified.json"
+        path.write_text(json.dumps(supplied))
+        before = snapshot_run(run_dir, self.path)
+
+        with self.assertRaisesRegex(ValueError, "Assessment retrospective classification must be a list of names"):
+            workflow.close_run(run_dir, path, ticket_path=self.path, ready=True)
+
+        self.assertEqual(snapshot_run(run_dir, self.path), before)
+
     def test_should_refuse_ready_when_ticket_is_not_draft(self):
         """should refuse --ready for a redirected or approved ticket"""
         for status in ["redirected", "approved"]:
