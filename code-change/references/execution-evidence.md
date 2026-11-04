@@ -13,17 +13,17 @@ python3 -B "$helper" note /tmp/pricing-plan --kind module-start --module P2 --te
 python3 -B "$helper" run /tmp/pricing-plan --module P2 --phase discovery --label existing-tests -- python3 -B -m unittest discover -s tests -v
 python3 -B "$helper" note /tmp/pricing-plan --kind module-end --module P2 --text 'Source, callers and tests inspected'
 python3 -B "$helper" note /tmp/pricing-plan --kind review --verdict READY --module P7 --text 'Independent plan-review; see review.md'
-python3 -B "$helper" close /tmp/pricing-plan --ticket /path/to/bundle/ticket.json --assessment /path/to/planning-assessment.json --review-file review.md --ready
+python3 -B "$helper" close /tmp/pricing-plan --ticket /path/to/bundle/ticket.json --assessment /path/to/planning-assessment.json --review-file review.md --ready --ledger /path/to/bundle/ledger
 # Only with actual implementation authority:
 python3 -B "$helper" approve /path/to/bundle/ticket.json --reviewed /tmp/pricing-plan/report.json --source 'User approved revision 1 in chat'
 ```
 
 Record `review` with its verdict when the review actually happens (Planning `READY`/`REVISE`/`BLOCKED`, Development `PASS`/`CHANGES`); the timestamp is an actual marker. Then finish with one `close`. It checks every precondition before writing anything and exits 2 without changes when one fails:
-- the assessment parses, the review file is readable, Planning has `--ticket`;
+- the assessment parses and its `acceptance`, `review` and `retrospective` are objects, the review file is readable, a `--ledger` path is a directory or absent, Planning has `--ticket`;
 - a review with a verdict exists and follows the final change (Development: last GREEN/REFACTOR and observed production/test change; Planning: last ticket-format check or ticket rework) — `close` never records the review itself;
-- recording readiness needs the latest Planning verdict `READY`, and `--ready` (draft → ready) also needs no blocking questions; Development refuses a `CHANGES` verdict.
+- recording readiness or a redirected disposition needs the latest Planning verdict `READY`, and `--ready` needs a draft ticket without blocking questions; Development refuses a `CHANGES` verdict.
 
-`close` then keeps the review file as evidence of that review, runs the ticket format check as a `verify` receipt and records `ticket-ready` (Planning), ends open modules as `auto_closed`, and writes `report.json`; its exit code is the report's. A ready or approved Planning ticket is incomplete without `review` and a later `ticket-ready`; redirected Planning needs `review`. Redirected Planning can complete without development AC; blocked Planning retains an incomplete report and clarification.
+`close` then keeps the review file as evidence of that review, runs the ticket format check as a `verify` receipt and records `ticket-ready` (Planning), ends open modules as `auto_closed`, and writes `report.json`; its exit code is the report's. Paths are resolved against the caller's directory. If the report is incomplete, fix the cause and run `close` again; its own format receipt does not count as a ticket change. A ready or approved Planning ticket is incomplete without `review` and a later `ticket-ready`; redirected Planning needs `review`. Redirected Planning can complete without development AC; blocked Planning retains an incomplete report and clarification.
 
 The Planning report carries `ticket_content_sha256`, a SHA-256 of the ticket's id, revision, sections and evidence-file bytes (not status or approval). `approve` accepts as `--reviewed` only a complete Planning report for the same ticket id (or a raw 64-character digest), refuses unless the ticket's current digest equals that reviewed digest, then writes `status: approved` and an approval object with the source, revision, digest and `reviewed_from` (`planning-report`, or `supplied-digest` when a raw digest is passed and therefore caller-attested). It also rebinds an earlier string approval. The approval source is still an attestation; the helper verifies only that the approved content is the reviewed content.
 
@@ -42,7 +42,7 @@ python3 -B "$helper" run /tmp/pricing-dev --module D3 --phase green --label prev
 python3 -B "$helper" run /tmp/pricing-dev --module D3 --phase refactor --label preview-1 --reason 'Shared operation reused; no further useful simplification' -- python3 -B -m unittest discover -s tests -v
 python3 -B "$helper" run /tmp/pricing-dev --module D4 --phase verify --label required-suite -- python3 -B -m unittest discover -s tests -v
 python3 -B "$helper" note /tmp/pricing-dev --kind review --verdict PASS --module D5 --text 'Independent review of final diff; no supported findings'
-python3 -B "$helper" close /tmp/pricing-dev --assessment /path/to/completion.json --review-file review.md
+python3 -B "$helper" close /tmp/pricing-dev --assessment /path/to/completion.json --review-file review.md --ledger /path/to/project/docs/workflow-retrospectives
 ```
 
 Development intake records `git status`; existing uncommitted changes are a report gap unless `--allow-dirty '<reason>'` acknowledges them. A replacement ticket revision starts a new run with `--supersedes <previous run dir>`, which requires the same ticket id and a higher revision and records the predecessor.
@@ -130,7 +130,7 @@ Development requires each selected AC to have a `pass` attestation with a concre
 - Development intake snapshots `<bundle>/ledger/*.json` into the run's `ledger-inputs/` (`ledger_inputs` in `run.json`). Development `close --ledger <worktree>/docs/workflow-retrospectives` writes its own row and copies the unchanged Planning rows; a row changed after intake is listed in `ledger_warnings`, not copied, and does not block completion.
 - Commit these files with the delivery. They are evidence, not reviewed code, and are not selected sources. One file per run means parallel branches never conflict.
 
-`ledger <dir>` summarizes the latest row per run: complete/incomplete counts, counts per classification, and recurring candidates (a classification present in at least two runs, with their improvements and run IDs). It proposes and adopts nothing; evaluation follows [learn-from-mistakes](../../learn-from-mistakes/references/task-retrospective.md).
+`ledger <dir>` (which must exist) summarizes the latest row per run, counting each classification once per run and ignoring malformed ones: complete/incomplete counts, counts per classification, and recurring candidates (a classification present in at least two runs, with their improvements and run IDs). It proposes and adopts nothing; evaluation follows [learn-from-mistakes](../../learn-from-mistakes/references/task-retrospective.md).
 
 ## Native telemetry and coverage
 

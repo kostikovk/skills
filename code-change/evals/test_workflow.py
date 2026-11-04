@@ -1396,6 +1396,81 @@ class CloseTests(ClosingFixture):
         with self.assertRaisesRegex(ValueError, "Review verdict is CHANGES"):
             workflow.close_run(run_dir, assessment_file(self.root))
 
+    def test_should_refuse_close_without_changes_when_assessment_shape_is_invalid(self):
+        """should refuse close and change nothing when a parsable assessment has the wrong shape"""
+        cases = [("review is a string", {"review": "pass"}),
+                 ("acceptance is a list", {"acceptance": []}),
+                 ("retrospective is a string", {"retrospective": "fine"}),
+                 ("an acceptance entry is a string", {"acceptance": {"AC-1": "pass"}})]
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        for name, supplied in cases:
+            with self.subTest(scenario=f"should refuse close when {name}"):
+                path = self.root / "shaped.json"
+                path.write_text(json.dumps(supplied))
+                before = snapshot_run(run_dir, self.path)
+
+                with self.assertRaisesRegex(ValueError, "Assessment"):
+                    workflow.close_run(run_dir, path, ticket_path=self.path, ready=True)
+
+                self.assertEqual(snapshot_run(run_dir, self.path), before)
+
+    def test_should_refuse_close_without_changes_when_ledger_is_a_file(self):
+        """should refuse close and change nothing when the ledger path is an existing file"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        ledger = self.root / "ledger-file"
+        ledger.write_text("not a directory\n")
+        before = snapshot_run(run_dir, self.path)
+
+        with self.assertRaisesRegex(ValueError, "Ledger path is not a directory"):
+            workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True, ledger=ledger)
+
+        self.assertEqual(snapshot_run(run_dir, self.path), before)
+
+    def test_should_complete_second_close_when_first_close_was_incomplete(self):
+        """should complete a second close after the first one reported incomplete evidence"""
+        run_dir = self.planning_draft()
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+        lacking = self.root / "lacking.json"
+        supplied = json.loads(planned_assessment(self.root).read_text())
+        del supplied["acceptance"]
+        lacking.write_text(json.dumps(supplied))
+        first = workflow.close_run(run_dir, lacking, ticket_path=self.path, ready=True)
+
+        second = workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path)
+
+        self.assertFalse(first["complete"])
+        self.assertTrue(second["complete"], second["gaps"])
+
+    def test_should_refuse_ready_when_ticket_is_not_draft(self):
+        """should refuse --ready for a redirected or approved ticket"""
+        for status in ["redirected", "approved"]:
+            with self.subTest(scenario=f"should refuse --ready when ticket is {status}"):
+                self.write_bound_ticket() if status == "approved" else None
+                ticket = json.loads(self.path.read_text()) if status == "approved" else example_ticket()
+                if status == "redirected":
+                    ticket.update(status="redirected", approval=None)
+                    self.write_ticket(ticket)
+                run_dir = self.root / f"planning-{status}"
+                workflow.init_run(run_dir, "planning", "pricing", self.root)
+                workflow.note(run_dir, "review", "Independent plan-review", verdict="READY")
+
+                with self.assertRaisesRegex(ValueError, "Ready requires a draft ticket"):
+                    workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path, ready=True)
+
+    def test_should_refuse_redirected_close_when_review_verdict_is_not_ready(self):
+        """should refuse to complete a redirected disposition whose latest review asked for revision"""
+        ticket = example_ticket()
+        ticket.update(status="redirected", approval=None)
+        self.write_ticket(ticket)
+        run_dir = self.root / "planning"
+        workflow.init_run(run_dir, "planning", "pricing", self.root)
+        workflow.note(run_dir, "review", "Independent plan-review", verdict="REVISE")
+
+        with self.assertRaisesRegex(ValueError, "redirected disposition requires a READY review verdict"):
+            workflow.close_run(run_dir, planned_assessment(self.root), ticket_path=self.path)
+
     def test_should_mark_auto_closed_modules_when_closing(self):
         """should mark modules closed by close and exclude them from module durations"""
         run_dir = self.planning_draft()
@@ -1544,6 +1619,32 @@ class LedgerTests(ClosingFixture):
 
         self.assertEqual(snapshot_run(run_dir), before)
 
+    def test_should_count_one_run_when_row_repeats_a_classification(self):
+        """should not report a recurring cause when one run lists the same classification twice"""
+        ledger = self.root / "ledger"
+        ledger.mkdir()
+        (ledger / "a.json").write_text(json.dumps({"run_id": "a", "classification": ["missing-context", "missing-context"]}))
+
+        actual = workflow.summarize_ledger(ledger)
+
+        self.assertEqual(actual["classification_counts"], {"missing-context": 1})
+        self.assertEqual(actual["recurring"], [])
+
+    def test_should_ignore_classification_when_row_value_is_not_a_list(self):
+        """should ignore a row's classification when it is not a list of names"""
+        ledger = self.root / "ledger"
+        ledger.mkdir()
+        (ledger / "a.json").write_text(json.dumps({"run_id": "a", "classification": "planning"}))
+
+        actual = workflow.summarize_ledger(ledger)
+
+        self.assertEqual((actual["runs"], actual["classification_counts"]), (1, {}))
+
+    def test_should_refuse_ledger_summary_when_directory_is_missing(self):
+        """should refuse to summarize a ledger directory that does not exist"""
+        with self.assertRaisesRegex(ValueError, "Ledger directory not found"):
+            workflow.summarize_ledger(self.root / "typo")
+
 
 class NativeTests(Fixture):
     def setUp(self):
@@ -1683,6 +1784,27 @@ class CliTests(Fixture):
         self.assertTrue(json.loads((run_dir / "report.json").read_text())["complete"])
         self.assertEqual(json.loads(self.path.read_text())["status"], "ready")
 
+    def test_should_pass_ticket_format_when_ticket_path_is_relative_to_caller(self):
+        """should run the ticket format check when close receives a ticket path relative to the caller"""
+        ticket = example_ticket()
+        ticket.update(status="draft", approval=None)
+        self.write_ticket(ticket)
+        repo = self.root / "repo"
+        repo.mkdir()
+        run_dir = self.root / "planning"
+        commands = [
+            ["init", str(run_dir), "--workflow", "planning", "--task", "pricing", "--repo", str(repo)],
+            ["note", str(run_dir), "--kind", "review", "--verdict", "READY", "--text", "Independent plan-review"],
+            ["close", "planning", "--ticket", "ticket.json", "--assessment", "planning-assessment.json", "--ready"],
+        ]
+        planned_assessment(self.root)
+
+        actual = [subprocess.run([sys.executable, "-B", str(SCRIPT), *args],
+                                 cwd=self.root, capture_output=True, text=True) for args in commands]
+
+        self.assertEqual(actual[-1].returncode, 0, actual[-1].stderr + actual[-1].stdout)
+        self.assertTrue(json.loads((run_dir / "report.json").read_text())["complete"])
+
     def test_should_write_and_summarize_ledger_when_invoked_from_cli(self):
         """should write a ledger row on close and summarize it with the ledger command from the CLI"""
         ticket = example_ticket()
@@ -1703,6 +1825,18 @@ class CliTests(Fixture):
         for args, result in zip(commands, actual):
             self.assertEqual(result.returncode, 0, f"{args[0]}: {result.stderr}{result.stdout}")
         self.assertEqual(json.loads(actual[-1].stdout)["runs"], 1)
+
+    def test_should_exit_malformed_when_report_assessment_has_wrong_shape(self):
+        """should exit 2 with an error, not a traceback, when the report assessment has the wrong shape"""
+        run_dir = self.root / "run"
+        workflow.init_run(run_dir, "planning", "pricing", self.root)
+        (self.root / "shaped.json").write_text('{"review": "pass"}')
+
+        actual = subprocess.run([sys.executable, "-B", str(SCRIPT), "report", str(run_dir),
+                                 "--assessment", str(self.root / "shaped.json")], capture_output=True, text=True)
+
+        self.assertEqual(actual.returncode, 2, actual.stderr)
+        self.assertIn("Assessment review must be an object", actual.stderr)
 
     def test_should_return_failure_with_report_when_completion_evidence_is_absent(self):
         """should return failure with report when completion evidence is absent"""

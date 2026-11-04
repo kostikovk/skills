@@ -289,7 +289,7 @@ def append_event(run_dir, event):
     return event
 
 
-def record_command(run_dir, phase, label, argv, reason=None, module=None):
+def record_command(run_dir, phase, label, argv, reason=None, module=None, origin=None):
     metadata = read_run(run_dir)
     require(phase in {"discovery", "baseline", "red", "green", "refactor", "verify"}, "Unknown phase")
     require(nonempty(label) and argv and all(isinstance(arg, str) for arg in argv), "Label and argv required")
@@ -331,7 +331,7 @@ def record_command(run_dir, phase, label, argv, reason=None, module=None):
                                  "duration_seconds": time.monotonic() - started,
                                  "exit_code": code, "log": log, "log_sha256": digest(run_dir / log),
                                  "source_before": source_before, "source_after": source_after,
-                                 "reason": reason})
+                                 "reason": reason, "origin": origin})
 
 
 def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, ready=False, ledger=None):
@@ -339,9 +339,12 @@ def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, read
     run_dir = Path(run_dir)
     metadata = read_run(run_dir)
     planning = metadata["workflow"] == "planning"
+    # Commands run in the project; caller-relative paths must not change meaning there.
+    ticket_path, review_file, ledger = (Path(path).resolve() if path else None
+                                        for path in (ticket_path, review_file, ledger))
     supplied = json.loads(Path(assessment_path).read_text())
-    require(isinstance(supplied, dict), "Assessment must be an object")
-    review_bytes = Path(review_file).read_bytes() if review_file else None
+    check_assessment(supplied)
+    review_bytes = review_file.read_bytes() if review_file else None
     check_ledger(ledger)
     recorded = events(run_dir)
     commands = [event for event in recorded if event["kind"] == "command"]
@@ -354,14 +357,18 @@ def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, read
         require(ticket_path, "Planning close requires --ticket")
         ticket_path = Path(ticket_path)
         ticket = validate_ticket(ticket_path)
-        changed = max([event["sequence"] for event in commands if event["label"] == "ticket-format"]
+        changed = max([event["sequence"] for event in commands
+                       if event["label"] == "ticket-format" and event.get("origin") != "close"]
                       + [event["sequence"] for event in recorded if event["kind"] == "ticket-rework"], default=0)
         require(latest["sequence"] > changed, "Review record missing after final ticket change")
         if ready:
+            require(ticket["status"] == "draft", "Ready requires a draft ticket")
             require(not ticket["blocking_questions"], "Ready requires no blocking questions")
             ticket = check_ticket({**ticket, "status": "ready"}, ticket_path.parent)
         if ticket["status"] in {"ready", "approved"}:
             require(latest["verdict"] == "READY", "Recording ticket-ready requires a READY review verdict")
+        if ticket["status"] == "redirected":
+            require(latest["verdict"] == "READY", "Completing a redirected disposition requires a READY review verdict")
     else:
         require(latest["sequence"] > final_change_sequence(metadata, commands),
                 "Review record missing after final change")
@@ -376,7 +383,8 @@ def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, read
     if planning:
         module = "P6" if metadata.get("module_scheme", 1) == MODULE_SCHEME else None
         record_command(run_dir, "verify", "ticket-format",
-                       [sys.executable, "-B", str(Path(__file__).resolve()), "ticket", str(ticket_path)], module=module)
+                       [sys.executable, "-B", str(Path(__file__).resolve()), "ticket", str(ticket_path)],
+                       module=module, origin="close")
         if ticket["status"] in {"ready", "approved"}:
             note(run_dir, "ticket-ready", f"Recorded by close after READY review {latest['sequence']}")
     starts = {}
@@ -414,11 +422,23 @@ def note(run_dir, kind, text, module=None, label=None, verdict=None):
 
 
 def check_ledger(ledger):
-    require(ledger is None or Path(ledger).parent.is_dir(), "Ledger parent directory is unavailable")
+    if ledger is not None:
+        require(Path(ledger).parent.is_dir(), "Ledger parent directory is unavailable")
+        require(not Path(ledger).exists() or Path(ledger).is_dir(), "Ledger path is not a directory")
+
+
+def check_assessment(supplied):
+    """Shape check only; the content stays an operator attestation."""
+    require(isinstance(supplied, dict), "Assessment must be an object")
+    for key in ["acceptance", "review", "retrospective"]:
+        require(key not in supplied or isinstance(supplied[key], dict), f"Assessment {key} must be an object")
+    require(all(isinstance(entry, dict) for entry in supplied.get("acceptance", {}).values()),
+            "Assessment acceptance entries must be objects")
 
 
 def summarize_ledger(directory):
     """Latest row per run and classifications shared by at least two runs; proposes nothing."""
+    require(Path(directory).is_dir(), f"Ledger directory not found: {directory}")
     latest = {}
     for path in sorted(Path(directory).glob("*.json")):
         row = json.loads(path.read_text())
@@ -427,7 +447,9 @@ def summarize_ledger(directory):
             latest[key] = row
     by_cause = {}
     for key, row in latest.items():
-        for cause in row.get("classification") or []:
+        causes = row.get("classification")
+        causes = causes if isinstance(causes, list) else []
+        for cause in dict.fromkeys(cause for cause in causes if isinstance(cause, str)):
             by_cause.setdefault(cause, []).append((key, row.get("improvements")))
     complete = sum(row.get("complete") is True for row in latest.values())
     return {"runs": len(latest), "complete": complete, "incomplete": len(latest) - complete,
@@ -442,6 +464,7 @@ def build_report(run_dir, assessment=None, ticket_path=None, ledger=None):
     metadata = read_run(run_dir)
     recorded = events(run_dir)
     assessment = assessment or {}
+    check_assessment(assessment)
     gaps = []
     ticket = ticket_root = None
     if metadata["workflow"] == "planning" and ticket_path:
