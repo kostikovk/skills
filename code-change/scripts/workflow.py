@@ -14,6 +14,15 @@ import sys
 
 SECTIONS = {"outcome", "current_state_gap", "acceptance_criteria",
             "scope_invariants", "impact_constraints"}
+NOTE_KINDS = {"module-start", "module-end", "red-confirmed", "ticket-ready", "review", "clarification",
+              "evidence-gap", "missed-functionality", "unexpected-dependency", "migration",
+              "ticket-rework", "rework", "human"}
+MODULES = {"planning": {f"P{n}" for n in range(1, 7)}, "development": {f"D{n}" for n in range(1, 8)}}
+
+
+def check_module(metadata, module):
+    require(module is None or module in MODULES[metadata["workflow"]],
+            f"Unknown module for {metadata['workflow']}: {module}")
 
 
 def require(condition, message):
@@ -62,8 +71,10 @@ def validate_ticket(path, development=False):
         require(not questions, "Ready scope cannot have blocking questions")
         require(all(nonempty(sections[key]) for key in SECTIONS - {"acceptance_criteria"}),
                 "Ready ticket sections must be nonempty")
+    approval = ticket.get("approval")
     if status == "approved":
-        require(nonempty(ticket.get("approval")), "Approved ticket needs an approval source")
+        require(nonempty(approval) or (isinstance(approval, dict) and nonempty(approval.get("source"))),
+                "Approved ticket needs an approval source")
     criteria = sections["acceptance_criteria"]
     require(isinstance(criteria, list) and (bool(criteria) or not ready),
             "Ready ticket needs acceptance criteria")
@@ -79,23 +90,91 @@ def validate_ticket(path, development=False):
     for reference in evidence:
         evidence_path(path.parent, reference)
         require(Path(reference) != Path("ticket.json"), "ticket.json is reserved for the intake snapshot")
+    if status == "approved" and isinstance(approval, dict):
+        require(approval.get("revision") == ticket["revision"]
+                and approval.get("content_sha256") == content_digest(ticket, path.parent),
+                "Approved content differs from reviewed content")
+    return ticket
+
+
+def content_digest(ticket, root):
+    """SHA-256 of the reviewed content: identity, sections and evidence bytes, not status/approval."""
+    content = {"id": ticket["id"], "revision": ticket["revision"], "sections": ticket["sections"],
+               "evidence": {reference: digest(evidence_path(Path(root), reference))
+                            for reference in ticket["evidence"]}}
+    return hashlib.sha256(json.dumps(content, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def ticket_digest(path):
+    path = Path(path)
+    return content_digest(validate_ticket(path), path.parent)
+
+
+def approve_ticket(path, reviewed, source):
+    """Bind an approval to the reviewed digest from a Planning report (or a caller-supplied digest)."""
+    path = Path(path)
+    ticket = validate_ticket(path)
+    require(nonempty(source), "Approval source is required")
+    require(ticket["status"] == "ready"
+            or (ticket["status"] == "approved" and isinstance(ticket.get("approval"), str)),
+            "Only a ready ticket, or an approved ticket with a string approval, can be approved")
+    reviewed = str(reviewed)
+    if len(reviewed) == 64 and all(character in "0123456789abcdef" for character in reviewed):
+        reviewed_sha, origin = reviewed, "supplied-digest"
+    else:
+        report = Path(reviewed)
+        require(report.is_file(), f"Reviewed Planning report not found: {reviewed}")
+        data = json.loads(report.read_text())
+        require(data.get("workflow") == "planning" and data.get("complete") is True
+                and (data.get("output_ticket") or {}).get("id") == ticket["id"],
+                "Reviewed Planning report is incomplete or not for this ticket")
+        reviewed_sha, origin = data.get("ticket_content_sha256"), "planning-report"
+    require(nonempty(reviewed_sha), "Reviewed content digest is unavailable")
+    current = content_digest(ticket, path.parent)
+    require(current == reviewed_sha, "Ticket content differs from reviewed content")
+    ticket["status"] = "approved"
+    ticket["approval"] = {"source": source, "revision": ticket["revision"], "content_sha256": current,
+                          "reviewed_sha256": reviewed_sha, "reviewed_from": origin, "approved_at": now()}
+    write_json(path, ticket)
     return ticket
 
 
 def init_run(run_dir, workflow_name, task_id, repo, ticket_path=None,
-             change_kind="behavior", provider=None, model=None, session=None, sources=None):
+             change_kind="behavior", provider=None, model=None, session=None, sources=None,
+             doc_sources=None, test_sources=None, allow_dirty=None, supersedes=None):
     run_dir, repo = Path(run_dir), Path(repo).resolve()
     require(workflow_name in {"planning", "development"}, "Unknown workflow")
     require(change_kind in {"behavior", "refactor", "tests", "documentation"}, "Unknown change kind")
     require(nonempty(task_id) and repo.is_dir(), "Task ID and repository directory are required")
     require(ticket_path is not None or workflow_name == "planning", "Development requires a ticket")
     ticket = validate_ticket(ticket_path, development=workflow_name == "development") if ticket_path else None
-    selected = []
-    for reference in sources or []:
-        source_path(repo, reference)
-        normalized = Path(reference).as_posix()
-        require(normalized not in selected, "Duplicate selected source")
-        selected.append(normalized)
+    selected, groups = [], {}
+    for group, references in [("sources", sources), ("doc_sources", doc_sources),
+                              ("test_sources", test_sources)]:
+        groups[group] = []
+        for reference in references or []:
+            source_path(repo, reference)
+            normalized = Path(reference).as_posix()
+            require(normalized not in selected, "Duplicate selected source")
+            selected.append(normalized)
+            groups[group].append(normalized)
+    predecessor = None
+    if supersedes:
+        # The predecessor's live bundle may already hold the replacement, so read its intake copy.
+        prior_run = json.loads((Path(supersedes) / "run.json").read_text())
+        prior_ticket = json.loads((Path(supersedes) / "inputs" / "ticket.json").read_text())
+        require(ticket and prior_ticket.get("id") == ticket["id"], "Predecessor ticket id differs")
+        require(ticket["revision"] > prior_ticket["revision"],
+                f"Replacement revision must be higher than {prior_ticket['revision']}")
+        predecessor = {"run_id": prior_run["run_id"], "ticket_id": prior_ticket["id"],
+                       "ticket_revision": prior_ticket["revision"]}
+    workspace = None
+    if workflow_name == "development":
+        status = subprocess.run(["git", "-C", str(repo), "status", "--porcelain=v1", "-uall"],
+                                capture_output=True, text=True)
+        if status.returncode == 0:
+            workspace = {"dirty_paths": sorted(line[3:] for line in status.stdout.splitlines() if line),
+                         "acknowledged": allow_dirty}
     run_dir.mkdir(parents=True, exist_ok=False)
     inputs = {}
     if ticket:
@@ -116,7 +195,9 @@ def init_run(run_dir, workflow_name, task_id, repo, ticket_path=None,
                 "provider": provider, "model": model, "session": session,
                 "identity_source": "operator-supplied; null means unavailable",
                 "ticket_revision": ticket["revision"] if ticket else None, "inputs": inputs}
-    metadata["sources"] = selected
+    metadata.update(groups)
+    metadata.update(workspace=workspace, predecessor=predecessor,
+                    ticket_id=ticket["id"] if ticket else None)
     metadata["source_intake"] = snapshot_sources(run_dir, repo, selected, "intake")
     write_json(run_dir / "run.json", metadata)
     (run_dir / "events.jsonl").touch()
@@ -158,8 +239,14 @@ def snapshot_sources(run_dir, repo, selected, stage):
     return snapshots
 
 
-def source_fingerprints(snapshot):
-    return {path: item["sha256"] if item else None for path, item in snapshot.items()}
+def source_fingerprints(snapshot, paths=None):
+    return {path: item["sha256"] if item else None for path, item in snapshot.items()
+            if paths is None or path in paths}
+
+
+def tracked_sources(metadata):
+    """Every snapshotted path: TDD-guarded production, documentation and test sources."""
+    return metadata.get("sources", []) + metadata.get("doc_sources", []) + metadata.get("test_sources", [])
 
 
 def read_run(run_dir):
@@ -187,6 +274,7 @@ def record_command(run_dir, phase, label, argv, reason=None, module=None):
     metadata = read_run(run_dir)
     require(phase in {"discovery", "baseline", "red", "green", "refactor", "verify"}, "Unknown phase")
     require(nonempty(label) and argv and all(isinstance(arg, str) for arg in argv), "Label and argv required")
+    check_module(metadata, module)
     prior = [event for event in events(run_dir) if event.get("label") == label]
     if phase == "green":
         red = [event for event in prior if event.get("phase") == "red"]
@@ -198,10 +286,18 @@ def record_command(run_dir, phase, label, argv, reason=None, module=None):
         green = [event for event in prior if event.get("phase") == "green"]
         require(green and green[-1]["exit_code"] == 0, "REFACTOR requires GREEN")
         require(nonempty(reason), "REFACTOR needs a simplification assessment")
+        # Only the GREEN that closed the label's latest cycle opens its REFACTOR window.
+        reds = [event for event in prior if event.get("phase") == "red"]
+        closing = next((event for event in prior if event.get("phase") == "green" and event["exit_code"] == 0
+                        and reds and event["sequence"] > reds[-1]["sequence"]), None)
+        require(closing and not any(event.get("kind") == "command" and event["sequence"] > closing["sequence"]
+                                    and (event["phase"] == "verify" or event["label"] != label)
+                                    for event in events(run_dir)),
+                f"REFACTOR window closed for {label}; start a new RED label")
     run_dir = Path(run_dir)
     log = f"command-{len(events(run_dir)) + 1}.log"
     stage = Path(log).stem
-    source_before = snapshot_sources(run_dir, metadata["repo"], metadata.get("sources", []), stage + "-before")
+    source_before = snapshot_sources(run_dir, metadata["repo"], tracked_sources(metadata), stage + "-before")
     started_at, started = now(), time.monotonic()
     with (run_dir / log).open("w") as output:
         try:
@@ -210,7 +306,7 @@ def record_command(run_dir, phase, label, argv, reason=None, module=None):
         except OSError as error:
             output.write(str(error) + "\n")
             code = 127
-    source_after = snapshot_sources(run_dir, metadata["repo"], metadata.get("sources", []), stage + "-after")
+    source_after = snapshot_sources(run_dir, metadata["repo"], tracked_sources(metadata), stage + "-after")
     return append_event(run_dir, {"kind": "command", "phase": phase, "label": label,
                                  "module": module, "argv": argv, "started_at": started_at,
                                  "duration_seconds": time.monotonic() - started,
@@ -220,7 +316,9 @@ def record_command(run_dir, phase, label, argv, reason=None, module=None):
 
 
 def note(run_dir, kind, text, module=None, label=None):
-    read_run(run_dir)
+    metadata = read_run(run_dir)
+    require(kind in NOTE_KINDS, f"Unknown note kind: {kind}")
+    check_module(metadata, module)
     require(nonempty(text), "A factual note is required")
     if kind in {"module-start", "module-end"}:
         require(nonempty(module), "Module ID is required")
@@ -228,6 +326,9 @@ def note(run_dir, kind, text, module=None, label=None):
         red = [event for event in events(run_dir)
                if event.get("label") == label and event.get("phase") == "red"]
         require(red and red[-1]["exit_code"] != 0, "An executed failing RED is required")
+        code = red[-1]["exit_code"]
+        require(code not in {126, 127} and 0 <= code < 128,
+                f"RED exit {code} indicates a runner or signal failure, not a behavioral assertion")
     return append_event(run_dir, {"kind": kind, "text": text, "module": module, "label": label,
                                  "source": "operator-attested"})
 
@@ -237,21 +338,55 @@ def build_report(run_dir, assessment=None, ticket_path=None):
     recorded = events(run_dir)
     assessment = assessment or {}
     gaps = []
-    ticket = None
+    ticket = ticket_root = None
     if metadata["workflow"] == "planning" and ticket_path:
-        ticket = validate_ticket(ticket_path)
+        ticket, ticket_root = validate_ticket(ticket_path), Path(ticket_path).parent
     elif metadata["ticket_revision"] is not None:
-        ticket = validate_ticket(Path(run_dir) / "inputs/ticket.json",
+        ticket_root = Path(run_dir) / "inputs"
+        ticket = validate_ticket(ticket_root / "ticket.json",
                                  development=metadata["workflow"] == "development")
     if ticket is None:
         gaps.append("Final ticket is unavailable")
     elif metadata["workflow"] == "planning" and ticket["status"] not in {"ready", "approved", "redirected"}:
         gaps.append("Planning ticket is not ready or redirected")
+    elif metadata["workflow"] == "development" and not isinstance(ticket.get("approval"), dict):
+        gaps.append("Approval is not bound to reviewed content")
+    workspace = metadata.get("workspace")
+    if workspace and workspace["dirty_paths"] and not nonempty(workspace.get("acknowledged")):
+        gaps.append("Workspace was dirty at intake")
     commands = [event for event in recorded if event["kind"] == "command"]
+    reviews = [event["sequence"] for event in recorded if event["kind"] == "review"]
+    if metadata["workflow"] == "planning" and ticket:
+        if not reviews:
+            gaps.append("Planning review record missing")
+        last_command = max((event["sequence"] for event in commands), default=0)
+        if ticket["status"] in {"ready", "approved"} and not any(
+                event["kind"] == "ticket-ready" and event["sequence"] > max(last_command, min(reviews, default=0))
+                for event in recorded):
+            gaps.append("Planning readiness marker missing after final command")
+    if metadata["workflow"] == "development":
+        # A review must follow the last cycle action and the last observed production/test change.
+        guarded_paths = metadata.get("sources", []) + metadata.get("test_sources", [])
+        final_change = max((event["sequence"] for event in commands if event["phase"] in {"green", "refactor"}),
+                           default=0)
+        state = source_fingerprints(metadata.get("source_intake", {}), guarded_paths)
+        for event in commands:
+            before = source_fingerprints(event.get("source_before", {}), guarded_paths)
+            after = source_fingerprints(event.get("source_after", {}), guarded_paths)
+            if before != state or after != before:
+                final_change = max(final_change, event["sequence"])
+            state = after
+        if not any(sequence > final_change for sequence in reviews):
+            gaps.append("Review record missing after final change")
     contradictions = []
     missing_integrity = []
     source_snapshots = [metadata.get("source_intake", {})]
-    expected_source = source_fingerprints(source_snapshots[0])
+    production = metadata.get("sources", [])
+    guarded = bool(production) and metadata["change_kind"] != "refactor"
+    # Production may change only inside an open cycle (qualified RED until passing GREEN)
+    # or its REFACTOR window, which a verification or another label's command closes.
+    closed = intake_state = source_fingerprints(source_snapshots[0], production)
+    open_label = window = None
     for event in commands:
         log = Path(run_dir) / event["log"]
         if not log.is_file():
@@ -262,29 +397,48 @@ def build_report(run_dir, assessment=None, ticket_path=None):
             contradictions.append(f"Command output changed: {event['sequence']}")
         before, after = event.get("source_before", {}), event.get("source_after", {})
         source_snapshots.extend([before, after])
-        if event["phase"] == "red" and expected_source:
-            if source_fingerprints(before) != expected_source:
-                contradictions.append(f"Selected source changed before RED: {event['label']}")
-            if source_fingerprints(before) != source_fingerprints(after):
-                contradictions.append(f"Selected source changed during RED command: {event['label']}")
-        if event["phase"] == "refactor" and event["exit_code"] == 0:
-            expected_source = source_fingerprints(after)
+        phase, label, passed = event["phase"], event["label"], event["exit_code"] == 0
+        prior, later = source_fingerprints(before, production), source_fingerprints(after, production)
+        if production and metadata["change_kind"] in {"tests", "documentation"}:
+            if prior != intake_state or later != intake_state:
+                contradictions.append(f"Production changed outside a TDD cycle: {label}")
+            continue
+        if phase == "red":
+            if production and prior != closed:
+                contradictions.append(f"Selected source changed before RED: {label}")
+            if production and prior != later:
+                contradictions.append(f"Selected source changed during RED command: {label}")
+            open_label, window = label, None
+        elif phase == "green" and label == open_label:
+            if passed:
+                open_label, window, closed = None, label, later
+        elif label == window and open_label is None and phase != "verify":
+            # Same-label commands inside the REFACTOR window; only GREEN/REFACTOR settle its state.
+            if phase in {"green", "refactor"} and passed:
+                closed = later
+                window = None if phase == "refactor" else window
+        elif open_label is None:
+            window = None
+            if guarded and (prior != closed or later != closed):
+                contradictions.append(f"Production changed outside a TDD cycle: {label}")
+            closed = later
     for snapshot in source_snapshots:
         for item in snapshot.values():
             if item:
                 path = Path(run_dir) / item["copy"]
                 if not path.is_file() or digest(path) != item["sha256"]:
                     contradictions.append(f"Source snapshot missing or changed: {item['copy']}")
-    if commands and metadata.get("sources"):
+    tracked = tracked_sources(metadata)
+    if commands and tracked:
         current = {}
-        for reference in metadata["sources"]:
+        for reference in tracked:
             path = source_path(metadata["repo"], reference)
             current[reference] = digest(path) if path.is_file() else None
         if current != source_fingerprints(commands[-1].get("source_after", {})):
             contradictions.append("Selected source changed after final recorded command")
     gaps.extend(missing_integrity)
     checks = {event["label"]: event for event in commands if event["phase"] == "verify"}
-    if metadata.get("sources") and commands:
+    if tracked and commands:
         for label, event in checks.items():
             if current != source_fingerprints(event.get("source_after", {})):
                 contradictions.append(f"Verification source is stale: {label}")
@@ -313,6 +467,21 @@ def build_report(run_dir, assessment=None, ticket_path=None):
                 event.get("kind") == "red-confirmed" and event.get("label") == label
                 and red["sequence"] < event["sequence"] < green["sequence"] for event in recorded):
             gaps.append(f"Behavioral RED qualification missing: {label}")
+        qualified = qualified_red(recorded, label)
+        qualifying = next((event for event in commands
+                           if qualified and event["phase"] == "green" and event["label"] == label
+                           and event["exit_code"] == 0 and event["sequence"] > qualified["confirmation"]
+                           and event["argv"] == qualified["red"]["argv"]), None)
+        if qualified and not qualifying:
+            gaps.append(f"GREEN did not rerun the RED command: {label}")
+        if qualifying:
+            red_event, tests = qualified["red"], metadata.get("test_sources", [])
+            if tests and (source_fingerprints(red_event.get("source_after", {}), tests)
+                          != source_fingerprints(qualifying.get("source_before", {}), tests)):
+                contradictions.append(f"Test changed between RED and GREEN: {label}")
+            if production and (source_fingerprints(red_event.get("source_before", {}), production)
+                               == source_fingerprints(qualifying.get("source_after", {}), production)):
+                contradictions.append(f"GREEN without production change: {label}")
     last_cycle_action = max((event["sequence"] for event in commands
                              if event["phase"] in {"red", "green", "refactor"}), default=0)
     gaps.extend(f"Verification predates final recorded cycle: {label}"
@@ -367,6 +536,8 @@ def build_report(run_dir, assessment=None, ticket_path=None):
             "completion_scope": "structural evidence only", "tdd_compliance": compliance,
             "ticket_revision": ticket["revision"] if ticket else None,
             "output_ticket": ticket if metadata["workflow"] == "planning" else None,
+            "ticket_content_sha256": content_digest(ticket, ticket_root)
+            if ticket and ticket["status"] in {"ready", "approved"} else None,
             "elapsed_to_report_seconds": seconds_between(metadata["started_at"], now()),
             "command_count": len(commands), "command_failures": sum(event["exit_code"] != 0 for event in commands),
             "time_to_first_red_seconds": seconds_between(metadata["started_at"], reds[0]["timestamp"]) if reds else None,
@@ -380,6 +551,17 @@ def build_report(run_dir, assessment=None, ticket_path=None):
                                 "Expected RED classification, AC coverage and review require semantic inspection",
                                 "Unrecorded actions, unavailable usage and human interventions cannot be inferred",
                                 "No filesystem interception, tamper-proofing or automatic hook enforcement"]}
+
+
+def qualified_red(recorded, label):
+    """The last RED of a label before its latest qualification, with that qualification's sequence."""
+    confirmations = [event for event in recorded if event.get("kind") == "red-confirmed" and event.get("label") == label]
+    if not confirmations:
+        return None
+    confirmation = confirmations[-1]["sequence"]
+    reds = [event for event in recorded if event.get("kind") == "command" and event.get("phase") == "red"
+            and event.get("label") == label and event["sequence"] < confirmation]
+    return {"red": reds[-1], "confirmation": confirmation} if reds else None
 
 
 def seconds_between(start, end):
@@ -446,9 +628,17 @@ def main():
     start.add_argument("--repo", required=True)
     start.add_argument("--ticket")
     start.add_argument("--change-kind", default="behavior", choices=["behavior", "refactor", "tests", "documentation"])
-    start.add_argument("--source", action="append", default=[], help="Relative source file to snapshot; repeat for selected paths, not full coverage")
+    start.add_argument("--source", action="append", default=[], help="Relative executable production file to snapshot and TDD-guard; repeat for selected paths, not full coverage")
+    start.add_argument("--doc-source", action="append", default=[], help="Relative documentation file to snapshot; may change outside a TDD cycle")
+    start.add_argument("--test-source", action="append", default=[], help="Relative test file to snapshot; must not change between RED and GREEN")
+    start.add_argument("--allow-dirty", help="Reason for accepting existing uncommitted changes at Development intake")
+    start.add_argument("--supersedes", help="Predecessor run directory replaced by this higher ticket revision")
     for name in ["provider", "model", "session"]:
         start.add_argument("--" + name)
+    approve = sub.add_parser("approve", help="Bind implementation approval to the reviewed ticket content")
+    approve.add_argument("path")
+    approve.add_argument("--reviewed", required=True, help="Planning report.json, or a caller-supplied content digest")
+    approve.add_argument("--source", required=True, help="Who approved and where, e.g. the user's explicit request")
     command = sub.add_parser("run", help="Record actual argv, output, duration and exit status")
     command.add_argument("run_dir")
     command.add_argument("--phase", required=True, choices=["discovery", "baseline", "red", "green", "refactor", "verify"])
@@ -482,7 +672,10 @@ def main():
             result = validate_ticket(args.path, args.development)
         elif args.action == "init":
             result = init_run(args.run_dir, args.workflow, args.task, args.repo, args.ticket,
-                              args.change_kind, args.provider, args.model, args.session, args.source)
+                              args.change_kind, args.provider, args.model, args.session, args.source,
+                              args.doc_source, args.test_source, args.allow_dirty, args.supersedes)
+        elif args.action == "approve":
+            result = approve_ticket(args.path, args.reviewed, args.source)
         elif args.action == "run":
             result = record_command(args.run_dir, args.phase, args.label, argv, args.reason, args.module)
             code = result["exit_code"] if result["exit_code"] >= 0 else 1
