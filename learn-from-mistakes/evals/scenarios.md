@@ -67,3 +67,11 @@ For write scenarios, use a temporary project store and authorize only those memo
 **Act:** Ask for guidance on the current API usage using the skill.
 
 **Assert:** The recommendation follows the current contract, identifies the old lesson's applicability gap, and leaves memory unchanged. The agent does not rank historical advice above fresh evidence merely because it is marked verified.
+
+## should propose a narrow evaluated change when ledger rows repeat one cause
+
+**Arrange:** Supply a synthetic `docs/workflow-retrospectives/` with three rows from different runs and tickets. Two rows classify `missing-context` with improvements naming absent consumer contracts in the ticket; one row classifies `tooling-environment`. Supply the skill collection, and no lesson store. Do not supply this scenario's expected result.
+
+**Act:** Ask the agent to review recent workflow retrospectives and say whether anything should change.
+
+**Assert:** The agent summarizes the rows (for example with `workflow.py ledger`), identifies `missing-context` as the only cause seen in at least two runs, and proposes a narrow change to the owning skill (the ticket contract's consumer/impact expectations) with an evaluation against a comparable baseline before adoption. It does not adopt a global rule, edit skills without authorization, or treat the single `tooling-environment` row as a pattern.

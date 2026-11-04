@@ -30,6 +30,7 @@ When decomposition is part of a plan, include its tasks in the mandatory [plan-r
 | Execution-ready tasks, enablers/spikes, or coverage/dependency review | [Task contract and coherence](references/task-contract.md) | Read canonical requirement semantics through requirements-definition; select the delivery scope |
 | A concrete example of the product-to-task mapping | [Worked example](references/worked-example.md) | Use the contract reference for real task preparation; example choices are illustrative |
 | Download or asynchronous completion across services and UI | [CSV export example](references/csv-export-example.md) | Read slicing and task contracts; the example illustrates contracts, not a required architecture |
+| Evaluate slicing, dependency contracts or assembled acceptance | [Evaluation scenarios](evals/scenarios.md) and [validation record](evals/validation.md) | Distinguish supplied-record decisions from implemented acceptance |
 
 ## Deliver and stop
 

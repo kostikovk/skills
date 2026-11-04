@@ -46,6 +46,7 @@ Classification and the applicable RED/GREEN/REFACTOR gates below are mandatory; 
 | Configure persistent invocation in project instructions | [Persistent invocation](references/activation.md); classify runtime configuration changes before editing |
 | Verify the origin of the cycle guidance | [Sources and adaptation](references/red-green-refactor.md#sources-and-adaptation) |
 | Retain machine-readable receipts for an explicit Planning/Development workflow | [Execution evidence](../code-change/references/execution-evidence.md) |
+| Evaluate change classification, phase order or evidence claims | [Evaluation scenarios](evals/scenarios.md); helper tests and historical runs have narrower stated scopes |
 
 ## RED — prove the behavior is missing
 

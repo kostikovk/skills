@@ -17,11 +17,16 @@ SECTIONS = {"outcome", "current_state_gap", "acceptance_criteria",
 NOTE_KINDS = {"module-start", "module-end", "red-confirmed", "ticket-ready", "review", "clarification",
               "evidence-gap", "missed-functionality", "unexpected-dependency", "migration",
               "ticket-rework", "rework", "human"}
-MODULES = {"planning": {f"P{n}" for n in range(1, 7)}, "development": {f"D{n}" for n in range(1, 8)}}
+# Scheme 2 follows the target Planning/Development diagrams; runs without a recorded
+# scheme started under scheme 1 and keep its IDs so one run never mixes meanings.
+REVIEW_VERDICTS = {"planning": {"READY", "REVISE", "BLOCKED"}, "development": {"PASS", "CHANGES"}}
+MODULE_SCHEME = 2
+MODULES = {1: {"planning": {f"P{n}" for n in range(1, 7)}, "development": {f"D{n}" for n in range(1, 8)}},
+           2: {"planning": {f"P{n}" for n in range(1, 9)}, "development": {f"D{n}" for n in range(0, 8)}}}
 
 
 def check_module(metadata, module):
-    require(module is None or module in MODULES[metadata["workflow"]],
+    require(module is None or module in MODULES[metadata.get("module_scheme", 1)][metadata["workflow"]],
             f"Unknown module for {metadata['workflow']}: {module}")
 
 
@@ -47,7 +52,12 @@ def evidence_path(root, reference):
 
 def validate_ticket(path, development=False):
     path = Path(path)
-    ticket = json.loads(path.read_text())
+    return check_ticket(json.loads(path.read_text()), path.parent, development)
+
+
+def check_ticket(ticket, root, development=False):
+    """Validate ticket data whose relative evidence lives under `root`."""
+    root = Path(root)
     require(isinstance(ticket, dict), "Ticket must be an object")
     require(type(ticket.get("contract_version")) is int and ticket["contract_version"] == 1,
             "Unsupported ticket contract version")
@@ -88,11 +98,11 @@ def validate_ticket(path, development=False):
     require(isinstance(evidence, list) and (bool(evidence) or not ready),
             "Ready ticket needs discovery evidence")
     for reference in evidence:
-        evidence_path(path.parent, reference)
+        evidence_path(root, reference)
         require(Path(reference) != Path("ticket.json"), "ticket.json is reserved for the intake snapshot")
     if status == "approved" and isinstance(approval, dict):
         require(approval.get("revision") == ticket["revision"]
-                and approval.get("content_sha256") == content_digest(ticket, path.parent),
+                and approval.get("content_sha256") == content_digest(ticket, root),
                 "Approved content differs from reviewed content")
     return ticket
 
@@ -185,6 +195,14 @@ def init_run(run_dir, workflow_name, task_id, repo, ticket_path=None,
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(original, target)
             inputs[str(original)] = {"copy": str(target.relative_to(run_dir)), "sha256": digest(target)}
+    ledger_inputs = {}
+    if ticket and workflow_name == "development":
+        for row in sorted((Path(ticket_path).resolve().parent / "ledger").glob("*.json")):
+            target = run_dir / "ledger-inputs" / row.name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(row, target)
+            ledger_inputs[row.name] = {"original": str(row), "copy": str(target.relative_to(run_dir)),
+                                       "sha256": digest(target)}
     revision = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
                               capture_output=True, text=True)
     metadata = {"format_version": 1, "run_id": str(uuid.uuid4()), "task_id": task_id,
@@ -197,7 +215,8 @@ def init_run(run_dir, workflow_name, task_id, repo, ticket_path=None,
                 "ticket_revision": ticket["revision"] if ticket else None, "inputs": inputs}
     metadata.update(groups)
     metadata.update(workspace=workspace, predecessor=predecessor,
-                    ticket_id=ticket["id"] if ticket else None)
+                    ticket_id=ticket["id"] if ticket else None, module_scheme=MODULE_SCHEME,
+                    ledger_inputs=ledger_inputs)
     metadata["source_intake"] = snapshot_sources(run_dir, repo, selected, "intake")
     write_json(run_dir / "run.json", metadata)
     (run_dir / "events.jsonl").touch()
@@ -270,7 +289,7 @@ def append_event(run_dir, event):
     return event
 
 
-def record_command(run_dir, phase, label, argv, reason=None, module=None):
+def record_command(run_dir, phase, label, argv, reason=None, module=None, origin=None):
     metadata = read_run(run_dir)
     require(phase in {"discovery", "baseline", "red", "green", "refactor", "verify"}, "Unknown phase")
     require(nonempty(label) and argv and all(isinstance(arg, str) for arg in argv), "Label and argv required")
@@ -312,13 +331,83 @@ def record_command(run_dir, phase, label, argv, reason=None, module=None):
                                  "duration_seconds": time.monotonic() - started,
                                  "exit_code": code, "log": log, "log_sha256": digest(run_dir / log),
                                  "source_before": source_before, "source_after": source_after,
-                                 "reason": reason})
+                                 "reason": reason, "origin": origin})
 
 
-def note(run_dir, kind, text, module=None, label=None):
+def close_run(run_dir, assessment_path, ticket_path=None, review_file=None, ready=False, ledger=None):
+    """Finish a run in one call. Every precondition is checked before the first write."""
+    run_dir = Path(run_dir)
+    metadata = read_run(run_dir)
+    planning = metadata["workflow"] == "planning"
+    # Commands run in the project; caller-relative paths must not change meaning there.
+    ticket_path, review_file, ledger = (Path(path).resolve() if path else None
+                                        for path in (ticket_path, review_file, ledger))
+    supplied = json.loads(Path(assessment_path).read_text())
+    check_assessment(supplied)
+    review_bytes = review_file.read_bytes() if review_file else None
+    check_ledger(ledger)
+    recorded = events(run_dir)
+    commands = [event for event in recorded if event["kind"] == "command"]
+    reviews = [event for event in recorded if event["kind"] == "review"]
+    require(reviews, "Review record required before close")
+    latest = reviews[-1]
+    require(latest.get("verdict"), "Review verdict required before close")
+    ticket = None
+    if planning:
+        require(ticket_path, "Planning close requires --ticket")
+        ticket_path = Path(ticket_path)
+        ticket = validate_ticket(ticket_path)
+        changed = max([event["sequence"] for event in commands
+                       if event["label"] == "ticket-format" and event.get("origin") != "close"]
+                      + [event["sequence"] for event in recorded if event["kind"] == "ticket-rework"], default=0)
+        require(latest["sequence"] > changed, "Review record missing after final ticket change")
+        if ready:
+            # An already-ready ticket is the documented retry after an incomplete close.
+            require(ticket["status"] in {"draft", "ready"}, "Ready requires a draft ticket")
+            require(not ticket["blocking_questions"], "Ready requires no blocking questions")
+            ticket = check_ticket({**ticket, "status": "ready"}, ticket_path.parent)
+        if ticket["status"] in {"ready", "approved"}:
+            require(latest["verdict"] == "READY", "Recording ticket-ready requires a READY review verdict")
+        if ticket["status"] == "redirected":
+            require(latest["verdict"] == "READY", "Completing a redirected disposition requires a READY review verdict")
+    else:
+        require(latest["sequence"] > final_change_sequence(metadata, commands),
+                "Review record missing after final change")
+        require(latest["verdict"] != "CHANGES", "Review verdict is CHANGES; correct and review again")
+    if planning and ready:
+        write_json(ticket_path, ticket)
+    if review_bytes is not None:
+        copy = f"review-{sum(event['kind'] == 'review-evidence' for event in recorded) + 1}.md"
+        (run_dir / copy).write_bytes(review_bytes)
+        append_event(run_dir, {"kind": "review-evidence", "review_sequence": latest["sequence"], "file": copy,
+                               "sha256": digest(run_dir / copy), "source": "operator-supplied"})
+    if planning:
+        module = "P6" if metadata.get("module_scheme", 1) == MODULE_SCHEME else None
+        record_command(run_dir, "verify", "ticket-format",
+                       [sys.executable, "-B", str(Path(__file__).resolve()), "ticket", str(ticket_path)],
+                       module=module, origin="close")
+        if ticket["status"] in {"ready", "approved"}:
+            note(run_dir, "ticket-ready", f"Recorded by close after READY review {latest['sequence']}")
+    starts = {}
+    for event in events(run_dir):
+        if event["kind"] == "module-start":
+            starts[event["module"]] = event
+        elif event["kind"] == "module-end":
+            starts.pop(event.get("module"), None)
+    for module in starts:
+        append_event(run_dir, {"kind": "module-end", "module": module, "text": "closed by close",
+                               "auto_closed": True, "source": "helper"})
+    report = build_report(run_dir, supplied, ticket_path if planning else None, ledger)
+    write_json(run_dir / "report.json", report)
+    return report
+
+
+def note(run_dir, kind, text, module=None, label=None, verdict=None):
     metadata = read_run(run_dir)
     require(kind in NOTE_KINDS, f"Unknown note kind: {kind}")
     check_module(metadata, module)
+    require(verdict is None or (kind == "review" and verdict in REVIEW_VERDICTS[metadata["workflow"]]),
+            f"Unknown review verdict for {metadata['workflow']}: {verdict}")
     require(nonempty(text), "A factual note is required")
     if kind in {"module-start", "module-end"}:
         require(nonempty(module), "Module ID is required")
@@ -330,13 +419,56 @@ def note(run_dir, kind, text, module=None, label=None):
         require(code not in {126, 127} and 0 <= code < 128,
                 f"RED exit {code} indicates a runner or signal failure, not a behavioral assertion")
     return append_event(run_dir, {"kind": kind, "text": text, "module": module, "label": label,
-                                 "source": "operator-attested"})
+                                 "verdict": verdict, "source": "operator-attested"})
 
 
-def build_report(run_dir, assessment=None, ticket_path=None):
+def check_ledger(ledger):
+    if ledger is not None:
+        require(Path(ledger).parent.is_dir(), "Ledger parent directory is unavailable")
+        require(not Path(ledger).exists() or Path(ledger).is_dir(), "Ledger path is not a directory")
+
+
+def check_assessment(supplied):
+    """Shape check only; the content stays an operator attestation."""
+    require(isinstance(supplied, dict), "Assessment must be an object")
+    for key in ["acceptance", "review", "retrospective"]:
+        require(key not in supplied or isinstance(supplied[key], dict), f"Assessment {key} must be an object")
+    require(all(isinstance(entry, dict) for entry in supplied.get("acceptance", {}).values()),
+            "Assessment acceptance entries must be objects")
+    classification = supplied.get("retrospective", {}).get("classification", [])
+    require(isinstance(classification, list) and all(isinstance(item, str) for item in classification),
+            "Assessment retrospective classification must be a list of names")
+
+
+def summarize_ledger(directory):
+    """Latest row per run and classifications shared by at least two runs; proposes nothing."""
+    require(Path(directory).is_dir(), f"Ledger directory not found: {directory}")
+    latest = {}
+    for path in sorted(Path(directory).glob("*.json")):
+        row = json.loads(path.read_text())
+        key = row.get("run_id", path.stem)
+        if key not in latest or str(row.get("recorded_at", "")) >= str(latest[key].get("recorded_at", "")):
+            latest[key] = row
+    by_cause = {}
+    for key, row in latest.items():
+        causes = row.get("classification")
+        causes = causes if isinstance(causes, list) else []
+        for cause in dict.fromkeys(cause for cause in causes if isinstance(cause, str)):
+            by_cause.setdefault(cause, []).append((key, row.get("improvements")))
+    complete = sum(row.get("complete") is True for row in latest.values())
+    return {"runs": len(latest), "complete": complete, "incomplete": len(latest) - complete,
+            "classification_counts": {cause: len(items) for cause, items in sorted(by_cause.items())},
+            "recurring": [{"classification": cause, "run_ids": [key for key, _ in items],
+                           "improvements": [text for _, text in items if nonempty(text)]}
+                          for cause, items in sorted(by_cause.items()) if len(items) >= 2]}
+
+
+def build_report(run_dir, assessment=None, ticket_path=None, ledger=None):
+    check_ledger(ledger)
     metadata = read_run(run_dir)
     recorded = events(run_dir)
     assessment = assessment or {}
+    check_assessment(assessment)
     gaps = []
     ticket = ticket_root = None
     if metadata["workflow"] == "planning" and ticket_path:
@@ -365,17 +497,7 @@ def build_report(run_dir, assessment=None, ticket_path=None):
                 for event in recorded):
             gaps.append("Planning readiness marker missing after final command")
     if metadata["workflow"] == "development":
-        # A review must follow the last cycle action and the last observed production/test change.
-        guarded_paths = metadata.get("sources", []) + metadata.get("test_sources", [])
-        final_change = max((event["sequence"] for event in commands if event["phase"] in {"green", "refactor"}),
-                           default=0)
-        state = source_fingerprints(metadata.get("source_intake", {}), guarded_paths)
-        for event in commands:
-            before = source_fingerprints(event.get("source_before", {}), guarded_paths)
-            after = source_fingerprints(event.get("source_after", {}), guarded_paths)
-            if before != state or after != before:
-                final_change = max(final_change, event["sequence"])
-            state = after
+        final_change = final_change_sequence(metadata, commands)
         if not any(sequence > final_change for sequence in reviews):
             gaps.append("Review record missing after final change")
     contradictions = []
@@ -502,7 +624,7 @@ def build_report(run_dir, assessment=None, ticket_path=None):
     if not (all(nonempty(retrospective.get(key)) for key in fields)
             and isinstance(classification, list) and all(item in categories for item in classification)):
         gaps.append("Structured retrospective is missing or invalid")
-    starts, durations = {}, {}
+    starts, durations, auto_closed = {}, {}, []
     for event in recorded:
         module = event.get("module")
         if event["kind"] == "module-start":
@@ -512,8 +634,21 @@ def build_report(run_dir, assessment=None, ticket_path=None):
         elif event["kind"] == "module-end":
             if module not in starts:
                 gaps.append(f"Module end has no start: {module}")
+            elif event.get("auto_closed"):
+                # Closed by `close`: the interval includes waiting, so it is not a module duration.
+                starts.pop(module)
+                auto_closed.append(module)
             else:
                 durations[module] = durations.get(module, 0) + seconds_between(starts.pop(module), event["timestamp"])
+    activity = {}
+    for event in commands:
+        if event.get("module"):
+            entry = activity.setdefault(event["module"], {"commands": 0, "failures": 0, "command_seconds": 0,
+                                                         "first_started_at": event["started_at"]})
+            entry["commands"] += 1
+            entry["failures"] += event["exit_code"] != 0
+            entry["command_seconds"] += event["duration_seconds"]
+            entry["last_finished_at"] = event["timestamp"]
     gaps.extend(f"Module has no end: {module}" for module in starts)
     reds = [event for event in commands if event["phase"] == "red" and event["exit_code"] != 0]
     native = [event for event in recorded if event["kind"] == "native"]
@@ -532,7 +667,7 @@ def build_report(run_dir, assessment=None, ticket_path=None):
                              if applicable else []) + missing_integrity,
         "basis": "Local receipts and operator attestations cannot certify semantic TDD compliance",
     }
-    return {**metadata, "generated_at": now(), "complete": not gaps, "gaps": gaps,
+    result = {**metadata, "generated_at": now(), "complete": not gaps, "gaps": gaps,
             "completion_scope": "structural evidence only", "tdd_compliance": compliance,
             "ticket_revision": ticket["revision"] if ticket else None,
             "output_ticket": ticket if metadata["workflow"] == "planning" else None,
@@ -544,13 +679,57 @@ def build_report(run_dir, assessment=None, ticket_path=None):
             "time_to_ready_seconds": seconds_between(metadata["started_at"], ready["timestamp"]) if ready else None,
             "red_to_green_seconds": red_to_green, "tdd_cycles": len(cycles),
             "recorded_phase_attempts": attempts,
-            "module_seconds": durations or None, "recorded_event_counts": counts,
+            "module_seconds": durations or None, "auto_closed_modules": auto_closed,
+            "module_activity": activity, "recorded_event_counts": counts,
             "provider_usage": native or None, "assessment": assessment,
             "assessment_source": "operator-attested; not semantically verified",
             "coverage_limits": ["Only wrapped commands and explicitly marked intervals are measured",
                                 "Expected RED classification, AC coverage and review require semantic inspection",
                                 "Unrecorded actions, unavailable usage and human interventions cannot be inferred",
                                 "No filesystem interception, tamper-proofing or automatic hook enforcement"]}
+    retrospective = assessment.get("retrospective", {})
+    result["ledger_row"] = {
+        "run_id": metadata["run_id"], "task_id": metadata["task_id"], "workflow": metadata["workflow"],
+        "ticket_id": metadata.get("ticket_id"), "ticket_revision": result["ticket_revision"],
+        "recorded_at": result["generated_at"], "complete": result["complete"], "gap_count": len(gaps),
+        "tdd_status": compliance["status"], "classification": retrospective.get("classification") or [],
+        "improvements": retrospective.get("improvements"),
+        "counts": {"commands": len(commands), "failures": result["command_failures"], "tdd_cycles": len(cycles),
+                   **{kind: counts.get(kind, 0) for kind in ["clarification", "evidence-gap", "missed-functionality",
+                                                             "unexpected-dependency", "migration", "ticket-rework",
+                                                             "rework", "human"]}},
+        "time_to_ready_seconds": result["time_to_ready_seconds"], "red_to_green_seconds": red_to_green}
+    # Planning rows snapshotted at intake travel on; a changed row is a warning, never a delivery gap.
+    unchanged, warnings = [], []
+    for name, item in metadata.get("ledger_inputs", {}).items():
+        original = Path(item["original"])
+        if original.is_file() and digest(original) == item["sha256"]:
+            unchanged.append(Path(run_dir) / item["copy"])
+        else:
+            warnings.append(f"Planning ledger row changed after intake: {name}")
+    result["ledger_warnings"] = warnings
+    if ledger:
+        ledger = Path(ledger)
+        ledger.mkdir(exist_ok=True)
+        write_json(ledger / f"{metadata['run_id']}.json", result["ledger_row"])
+        for row in unchanged:
+            shutil.copyfile(row, ledger / row.name)
+    return result
+
+
+def final_change_sequence(metadata, commands):
+    """Sequence of the last GREEN/REFACTOR or observed production/test change; a review must follow it."""
+    guarded_paths = metadata.get("sources", []) + metadata.get("test_sources", [])
+    final_change = max((event["sequence"] for event in commands if event["phase"] in {"green", "refactor"}),
+                       default=0)
+    state = source_fingerprints(metadata.get("source_intake", {}), guarded_paths)
+    for event in commands:
+        before = source_fingerprints(event.get("source_before", {}), guarded_paths)
+        after = source_fingerprints(event.get("source_after", {}), guarded_paths)
+        if before != state or after != before:
+            final_change = max(final_change, event["sequence"])
+        state = after
+    return final_change
 
 
 def qualified_red(recorded, label):
@@ -651,6 +830,14 @@ def main():
     mark.add_argument("--text", required=True)
     mark.add_argument("--module")
     mark.add_argument("--label")
+    mark.add_argument("--verdict", help="Review verdict: Planning READY/REVISE/BLOCKED, Development PASS/CHANGES")
+    finish = sub.add_parser("close", help="Finish a reviewed run in one call; refuses without writing on any failed precondition")
+    finish.add_argument("run_dir")
+    finish.add_argument("--assessment", required=True)
+    finish.add_argument("--ticket", help="Planning output bundle ticket")
+    finish.add_argument("--review-file", help="Review record to retain as evidence of the latest review note")
+    finish.add_argument("--ready", action="store_true", help="Planning: mark a draft ticket ready after a READY review")
+    finish.add_argument("--ledger", help="Directory for this run's retrospective row; its parent must exist")
     native = sub.add_parser("native", help="Retain and extract a native JSON/JSONL capture")
     native.add_argument("run_dir")
     native.add_argument("--provider", required=True, choices=["codex", "claude"])
@@ -659,6 +846,9 @@ def main():
     report.add_argument("run_dir")
     report.add_argument("--assessment")
     report.add_argument("--ticket", help="Final Planning output bundle ticket")
+    report.add_argument("--ledger", help="Directory for this run's retrospective row; its parent must exist")
+    summary = sub.add_parser("ledger", help="Summarize retrospective rows and recurring causes; proposes nothing")
+    summary.add_argument("directory")
     # Separate command argv explicitly; do not interpret or execute a shell string.
     arguments = sys.argv[1:]
     argv = []
@@ -680,12 +870,17 @@ def main():
             result = record_command(args.run_dir, args.phase, args.label, argv, args.reason, args.module)
             code = result["exit_code"] if result["exit_code"] >= 0 else 1
         elif args.action == "note":
-            result = note(args.run_dir, args.kind, args.text, args.module, args.label)
+            result = note(args.run_dir, args.kind, args.text, args.module, args.label, args.verdict)
+        elif args.action == "close":
+            result = close_run(args.run_dir, args.assessment, args.ticket, args.review_file, args.ready, args.ledger)
+            code = 0 if result["complete"] else 1
+        elif args.action == "ledger":
+            result = summarize_ledger(args.directory)
         elif args.action == "native":
             result = import_native(args.run_dir, args.provider, args.source)
         else:
             supplied = json.loads(Path(args.assessment).read_text()) if args.assessment else None
-            result = build_report(args.run_dir, supplied, args.ticket)
+            result = build_report(args.run_dir, supplied, args.ticket, args.ledger)
             write_json(Path(args.run_dir) / "report.json", result)
             code = 0 if result["complete"] else 1
         print(json.dumps(result, indent=2))

@@ -25,5 +25,6 @@ Read this entrypoint, then load only the route needed below. A fragment identifi
 | Create a requested local commit | [Local commits](references/local-commits.md) | Inspect all staged and relevant working changes; load message guidance when writing the message |
 | Draft or publish a requested PR | [Pull requests](references/pull-requests.md) | A draft needs no publication; remote creation requires the corresponding request |
 | Finish a merged task or remove its completed branch/worktree | [Post-merge cleanup](references/workspace-cleanup.md) | Verify merge and task ownership, preserve retained work, then remove only eligible local resources |
+| Evaluate workspace, delivery or cleanup boundaries | [Evaluation scenarios](evals/scenarios.md) | Use disposable local repositories and retain before/after state |
 
 For a combined request, follow the needed routes in dependency order: workspace setup before edits, local commit preparation before committing, and PR delivery after its branch/diff is ready. Report the result and actual verification evidence for the requested operation, including any remaining changes or blocker.
