@@ -40,6 +40,7 @@ A fragment identifies a heading, not an automatic partial read. Locate it and re
 | A shared operation needs extraction or a wrapper may be redundant | [Extract shared knowledge deliberately](references/reuse-and-principles.md#extract-shared-knowledge-deliberately) | Compare existing implementations and callers first |
 | Choosing or evaluating implementation structure | [Apply principles to the observed problem](references/reuse-and-principles.md#apply-principles-to-the-observed-problem) | Apply relevant criteria to the observed change; read extraction guidance too when extracting |
 | Adding or changing an API | [Keep API contracts synchronized](references/api-contracts.md#keep-api-contracts-synchronized) | Identify routes, contract source and consumers before changing behavior |
+| Evaluate implementation workflow or receipt mechanics | [Workflow scenarios and historical results](../docs/workflow-evaluation.md), [TDD hardening](../docs/tdd-integration-validation.md), and [helper regression tests](evals/test_workflow.py) | Use the [shared evaluation procedure](../docs/skill-evaluation.md); run the helper suite with the [documented command](../CONTEXT.md#validation-boundaries), not as proof of agent compliance |
 
 Use the applicable principle criteria for every implementation choice; the section is separate so its catalog need not be loaded for discovery or workspace setup alone. Sources for these criteria remain in [reuse-and-principles.md](references/reuse-and-principles.md#sources).
 

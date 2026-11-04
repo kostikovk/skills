@@ -25,6 +25,7 @@ Produce a usable behavioral contract that preserves the product need. Separate w
 | Planning must produce a ticket for an independent Development session | [Development Ticket](references/development-ticket.md), after the requirement contract | Five-section, versioned handoff with separate discovery evidence and explicit approval |
 | Changed requirements or existing acceptance evidence | [Requirement changes](references/requirement-contract.md#requirement-changes) and [evidence](references/requirement-contract.md#evidence-and-product-outcomes) | Affected work identified; stale readiness/evidence marked |
 | Need to see intake translated into a usable contract | [Worked example](references/worked-example.md) | An illustrative request, decisions and scoped handoff |
+| Evaluate requirement grounding, readiness or handoff | [Evaluation scenarios](evals/scenarios.md) | Separate specifications, decisions and actual execution evidence |
 
 Read the selected reference before performing that branch. Routes add detail; they do not make the required boundaries optional.
 

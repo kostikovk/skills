@@ -40,6 +40,7 @@ Grounding, supported-version constraints, implementation rules, and verification
 | Choosing or modernizing Go features | [Version-Aware Go](references/modern-go.md); establish availability before selecting a feature |
 | Slow paths, allocations, benchmarks | [Performance](references/performance.md); establish evidence before choosing or measuring a change |
 | Selecting the runner/toolchain manager, formatting, lint, CI, or toolchain failures | [Toolchain and runner detection](references/tooling.md#toolchain-and-runner-detection), [Verification choices](references/tooling.md#verification-choices), [Version failures](references/tooling.md#version-failures), or [Handling findings](references/tooling.md#handling-findings) |
+| Evaluate Go implementation, review or toolchain routing | [Evaluation scenarios](evals/scenarios.md); retain actual execution and supported-version evidence |
 
 ## Implement the contract
 

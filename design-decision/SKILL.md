@@ -37,6 +37,7 @@ The skill covers three primary decision classes and a set of cross-cutting ones:
 | API / event contracts, contract testing | [spec-driven](references/spec-driven.md) | Contract design, authoritative source, generation, conformance and consumer compatibility |
 | Caching, locking, messaging guarantees, resiliency, migration, rate limiting, id generation, scaling algorithms | [patterns-and-algorithms](references/patterns-and-algorithms.md) | Problem → pattern / algorithm → source |
 | LLM-backed systems (RAG, agents, evals) | [ai-engineering](references/ai-engineering.md) | AI-native patterns |
+| Evaluate this skill’s decisions and project discovery | [Evaluation cases](evals/evals.json) and [synthetic fixture/run instructions](evals/fixtures/project-precedent/README.md) | Keep expected answers outside performer context; fixture tests do not execute the decision cases |
 
 Load only the reference and section the question needs, after the mandatory Decision Protocol below. A fragment identifies a heading, not an automatic partial read. Locate it and read through the next heading of the same or higher level with bounded reads. If section reads are unavailable, load only the relevant reference file. Follow prerequisite links; do not load every reference by default.
 

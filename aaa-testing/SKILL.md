@@ -33,6 +33,7 @@ The shared grounding, scenario naming, AAA phases, test-shape, and verification 
 | React project setup and component-test decisions | [Apply the pattern](references/react-tests.md#apply-the-pattern-in-a-project) |
 | Vue component test | [Vue tests](references/vue-tests.md#tests-countertestts); read its [fixture](references/vue-tests.md#component-fixture-countervue) if needed to understand the example |
 | Vue-specific component-test decisions | [Vue-specific decisions](references/vue-tests.md#vue-specific-decisions) |
+| Evaluate test design, preservation or language routing | [Evaluation scenarios](evals/scenarios.md); specifications are separate from completed runs |
 
 For another language, apply the shared rules with the project's native runner rather than introducing these example frameworks.
 
