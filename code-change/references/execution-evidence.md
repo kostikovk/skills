@@ -12,7 +12,6 @@ python3 -B "$helper" init /tmp/pricing-plan --workflow planning --task pricing -
 python3 -B "$helper" note /tmp/pricing-plan --kind module-start --module P2 --text 'Start current-state discovery'
 python3 -B "$helper" run /tmp/pricing-plan --module P2 --phase discovery --label existing-tests -- python3 -B -m unittest discover -s tests -v
 python3 -B "$helper" note /tmp/pricing-plan --kind module-end --module P2 --text 'Source, callers and tests inspected'
-# When the plan-review returns, record it with its verdict:
 python3 -B "$helper" note /tmp/pricing-plan --kind review --verdict READY --module P7 --text 'Independent plan-review; see review.md'
 python3 -B "$helper" close /tmp/pricing-plan --ticket /path/to/bundle/ticket.json --assessment /path/to/planning-assessment.json --review-file review.md --ready
 # Only with actual implementation authority:
@@ -46,11 +45,11 @@ python3 -B "$helper" note /tmp/pricing-dev --kind review --verdict PASS --module
 python3 -B "$helper" close /tmp/pricing-dev --assessment /path/to/completion.json --review-file review.md
 ```
 
-Development intake records `git status --porcelain=v1 -uall`; existing uncommitted changes are a report gap unless `--allow-dirty '<reason>'` acknowledges them. Keep run directories and bundles outside the repository's sources. A replacement ticket revision starts a new run with `--supersedes <previous run dir>`, which requires the same ticket id and a higher revision and records the predecessor.
+Development intake records `git status`; existing uncommitted changes are a report gap unless `--allow-dirty '<reason>'` acknowledges them. A replacement ticket revision starts a new run with `--supersedes <previous run dir>`, which requires the same ticket id and a higher revision and records the predecessor.
 
 Use the project's actual runner, not these illustrative Python commands by default. Use a distinct label for each behavior cycle. Verification labels identify stable required checks; after correction rerun the same check label. Never relabel/drop a failed check to obtain completion. `--change-kind refactor|tests|documentation` is available at intake for TDD's other classifications; it does not justify skipping behavioral RED for a behavior change. Relevant baseline/characterization/final evidence remains required by the owning skills.
 
-The helper rejects GREEN without a prior nonzero RED receipt and a later operator qualification. Qualification is refused when that RED exited 126, 127, 128 or above, or by signal, because those indicate a missing runner or killed process. A cycle completes only when a passing GREEN after qualification reran exactly the qualified RED's argv; further GREEN commands such as the suite are allowed. The helper still cannot tell an assertion failure from another nonzero exit of a runnable command, see a stateful non-test command that fails and then passes, or guarantee all commands were captured. TDD's semantic gates remain mandatory. Native hooks could add interception, but no adapter or trust configuration is installed here; filesystem/shell paths and untrusted hooks preclude claims of perfect enforcement.
+The helper rejects GREEN without a prior nonzero RED receipt and a later operator qualification. Qualification is refused when that RED exited 126, 127, 128 or above, or by signal, because those indicate a missing runner or killed process. A cycle completes only when a passing GREEN after qualification reran exactly the qualified RED's argv; further GREEN commands such as the suite are allowed. The helper still cannot tell an assertion failure from another nonzero exit of a runnable command, see a stateful non-test command that fails and then passes, or guarantee all commands were captured. TDD's semantic gates remain mandatory. No interception or hook adapter is installed, so never claim perfect enforcement.
 
 Optional repeated paths select repository-relative files to snapshot at intake and
 before/after each wrapped command; absent files are recorded as absent. Choose actual
@@ -88,8 +87,7 @@ check after a change.
 
 `report` writes `report.json`; exits 0 only when its structural evidence checks pass, 1 for incomplete evidence and 2 for malformed/unavailable inputs. `run` preserves the actual command's exit status and captures missing executables as exit 127. Logs retain stdout/stderr, so avoid passing secrets or retaining sensitive output. Run directories are single-writer; concurrent workers require separate runs.
 
-`complete` retains its historical structural meaning, now explicitly labeled by
-`completion_scope`. `tdd_compliance.verified` is always false: this generic helper
+`complete` is structural only (`completion_scope`). `tdd_compliance.verified` is always false: this generic helper
 does not independently inspect test semantics or all actions. Its status is
 `unverified` for behavior changes, `contradictory` for detected log/source integrity
 or sampled-order contradictions, and `not-applicable` for other classifications.
@@ -122,7 +120,7 @@ The completion JSON contains:
 }
 ```
 
-Development requires each selected AC to have a `pass` attestation with a concrete executed evidence reference. Planning accepts `planned` with a feasible acceptance/evidence plan; use `pass` only for behavior actually checked. Planning completion does not mean its future implementation already works. Review must actually have occurred, including task fidelity and unresolved findings. Retrospective semantics/categories are owned by [task-retrospective](../../learn-from-mistakes/references/task-retrospective.md). These fields are operator attestations, not automatically verified truth. An incomplete cycle, the latest failed or stale required check, missing review/AC/retrospective, or unmatched module markers keeps the structural report incomplete. So do, for Development, an approval not bound to the reviewed content, an unacknowledged dirty workspace at intake, and no `review` note after the last GREEN/REFACTOR and the last observed production or test change. Intake snapshots and SHA-256 fingerprints detect changed/unavailable ticket/evidence inputs on subsequent helper calls. Preserve originals while a run is active; the run stores local absolute provenance, while the transferable ticket bundle uses relative references. No receipt file is tamper-proof.
+Development requires each selected AC to have a `pass` attestation with a concrete executed evidence reference. Planning accepts `planned` with a feasible acceptance/evidence plan; use `pass` only for behavior actually checked. Planning completion does not mean its future implementation already works. Review must actually have occurred, including task fidelity and unresolved findings. Retrospective semantics/categories are owned by [task-retrospective](../../learn-from-mistakes/references/task-retrospective.md). These fields are operator attestations, not automatically verified truth. An incomplete cycle, the latest failed or stale required check, missing review/AC/retrospective, or unmatched module markers keeps the structural report incomplete. So do, for Development, an approval not bound to the reviewed content, an unacknowledged dirty workspace at intake, and no `review` note after the last GREEN/REFACTOR and the last observed production or test change. Intake snapshots and SHA-256 fingerprints detect changed/unavailable ticket/evidence inputs on subsequent helper calls. Preserve originals while a run is active; the run stores local absolute provenance, while the transferable ticket bundle uses relative references.
 
 ## Retrospective ledger
 
@@ -136,16 +134,7 @@ Development requires each selected AC to have a `pass` attestation with a concre
 
 ## Native telemetry and coverage
 
-When running through a CLI, retain its documented native output directly rather than estimating provider metrics. Check the installed version/help and project permissions first. These examples do not grant additional tool permissions or select a model:
-
-```sh
-codex exec --json -C /path/to/project 'Read the accessible plan skill and prepare the requested ticket' > /tmp/planning-native.jsonl
-claude -p 'Read the accessible code-change skill and implement the approved ticket' --output-format stream-json --verbose > /tmp/development-native.jsonl
-python3 -B "$helper" native /tmp/pricing-plan --provider codex --source /tmp/planning-native.jsonl
-python3 -B "$helper" native /tmp/pricing-dev --provider claude --source /tmp/development-native.jsonl
-```
-
-CLI flags/capabilities are documented in [Codex noninteractive mode](https://learn.chatgpt.com/docs/non-interactive-mode) and [Claude programmatic execution](https://code.claude.com/docs/en/headless). Do not automatically start another provider process from inside its own run. A launcher/operator imports the completed outer capture and regenerates the report. Provider import retains raw bytes and extracts exposed session, model(s), usage and estimated cost. It does not infer unexposed models, estimate cost from token pricing or sum conversation totals across imports. Byte-identical imports are rejected; overlapping/resumed captures still require operator reconciliation. Partial/failed streams remain raw evidence with unavailable fields.
+When running through a CLI, retain its documented native output directly rather than estimating provider metrics. Capture commands, provider flags and import parsing are in [native telemetry capture](native-telemetry.md). Do not automatically start another provider process from inside its own run.
 
 | Measurement | Source and limit |
 |---|---|
